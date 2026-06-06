@@ -25,7 +25,7 @@ async function generarPDF(
   compra: { codigo: string; nombre: string; estado: string | null; fecha_cierre: string | null },
   productos: ProductoPropuesto[],
   total: number
-): Promise<Uint8Array> {
+): Promise<ArrayBuffer> {
   const doc = await PDFDocument.create();
   const page = doc.addPage([595, 842]); // A4
   const regular = await doc.embedFont(StandardFonts.Helvetica);
@@ -124,7 +124,8 @@ async function generarPDF(
   page.drawLine({ start: { x: L, y: pieY + 12 }, end: { x: R, y: pieY + 12 }, thickness: 0.4, color: LINEA });
   write('Propuesta generada por Mercado Público Dashboard', L + W / 2 - 130, pieY, 8, regular, GRIS);
 
-  return doc.save();
+  const bytes = await doc.save();
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 export async function GET(
@@ -168,8 +169,9 @@ export async function GET(
   const productos = (propuesta.productos_propuestos_json ?? []) as ProductoPropuesto[];
   const pdfBytes = await generarPDF(usuario, compra, productos, propuesta.monto_total);
 
-  return new Response(new Blob([pdfBytes], { type: 'application/pdf' }), {
+  return new Response(pdfBytes, {
     headers: {
+      'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="propuesta-${compra.codigo}.pdf"`,
     },
   });
