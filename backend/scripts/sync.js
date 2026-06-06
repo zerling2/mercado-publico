@@ -31,8 +31,13 @@ async function syncComprasAgiles() {
         proveedor_cotizando_json: [],
       });
 
-      if (!error) inserted++;
-      else console.error(`Error upsert compra ${compra.codigo}:`, error.message);
+      if (!error) {
+        inserted++;
+      } else if (error.code === '23505') {
+        // unique violation — registro ya existe, se ignora
+      } else {
+        console.error(`Error upsert compra ${compra.codigo}:`, error.message);
+      }
     } catch (err) {
       console.error(`Error inserting compra ${compra.codigo}:`, err.message);
     }

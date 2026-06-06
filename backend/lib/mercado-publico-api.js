@@ -39,7 +39,7 @@ export async function fetchComprasAgiles() {
 
       allItems.push(...items);
       totalPaginas = paginacion?.total_paginas ?? 1;
-      const maxPaginas = Math.min(totalPaginas, 10);
+      const maxPaginas = Math.min(totalPaginas, 6);
 
       console.log(`   Página ${paginaActual}/${totalPaginas} — ${items.length} items`);
       paginaActual++;
