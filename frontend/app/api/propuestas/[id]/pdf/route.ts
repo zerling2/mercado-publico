@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import PDFDocument from 'pdfkit';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 interface ProductoPropuesto {
   nombre: string;
@@ -14,116 +14,117 @@ function formatCLP(n: number): string {
   return '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
-function generarPDF(
-  usuario: { empresa_nombre: string; email: string; region: number },
-  compra: { codigo: string; nombre: string; estado: string | null; monto: number | null; fecha_cierre: string | null },
+const NEGRO  = rgb(0.07, 0.07, 0.07);
+const GRIS   = rgb(0.42, 0.45, 0.50);
+const AZUL   = rgb(0.11, 0.31, 0.87);
+const FONDO  = rgb(0.95, 0.96, 0.98);
+const LINEA  = rgb(0.88, 0.89, 0.91);
+
+async function generarPDF(
+  empresa: { empresa_nombre: string; email: string; region: number },
+  compra: { codigo: string; nombre: string; estado: string | null; fecha_cierre: string | null },
   productos: ProductoPropuesto[],
   total: number
-): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50, size: 'A4' });
-    const chunks: Buffer[] = [];
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([595, 842]); // A4
+  const regular = await doc.embedFont(StandardFonts.Helvetica);
+  const bold    = await doc.embedFont(StandardFonts.HelveticaBold);
 
-    doc.on('data', (c: Buffer) => chunks.push(c));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
+  const { height } = page.getSize();
+  const L = 50;   // margen izquierdo
+  const R = 545;  // margen derecho
+  const W = R - L;
+  let y = height - 50;
 
-    const azul = '#1d4ed8';
-    const gris = '#6b7280';
-    const negro = '#111827';
-    const pageWidth = 495; // 595 - 2×50
+  const write = (text: string, x: number, yPos: number, size: number, font = regular, color = NEGRO) => {
+    page.drawText(text, { x, y: yPos, size, font, color, maxWidth: R - x });
+  };
 
-    // ── Encabezado ──────────────────────────────────────────────────────────
-    doc.fontSize(20).font('Helvetica-Bold').fillColor(negro)
-      .text(usuario.empresa_nombre, 50, 50);
+  // ── Encabezado ───────────────────────────────────────────────────────────
+  write(empresa.empresa_nombre, L, y, 18, bold);
+  y -= 16;
+  write(`${empresa.email}  ·  Región ${empresa.region}`, L, y, 9, regular, GRIS);
+  y -= 14;
+  page.drawLine({ start: { x: L, y }, end: { x: R, y }, thickness: 0.5, color: LINEA });
+  y -= 22;
 
-    doc.fontSize(9).font('Helvetica').fillColor(gris)
-      .text(`${usuario.email}  ·  Región ${usuario.region}`, 50, doc.y + 2);
+  // ── Título ───────────────────────────────────────────────────────────────
+  write('PROPUESTA DE COTIZACIÓN', L, y, 16, bold, AZUL);
+  y -= 14;
+  const fecha = new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
+  write(`Generada el ${fecha}`, L, y, 9, regular, GRIS);
+  y -= 26;
 
-    doc.moveTo(50, doc.y + 10).lineTo(545, doc.y + 10).strokeColor('#e5e7eb').stroke();
+  // ── Datos compra ─────────────────────────────────────────────────────────
+  write('COMPRA ÁGIL', L, y, 10, bold);
+  y -= 14;
 
-    // ── Título propuesta ─────────────────────────────────────────────────────
-    const fechaHoy = new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
-    doc.moveDown(1.5);
-    doc.fontSize(16).font('Helvetica-Bold').fillColor(azul)
-      .text('PROPUESTA DE COTIZACIÓN');
-    doc.fontSize(9).font('Helvetica').fillColor(gris)
-      .text(`Generada el ${fechaHoy}`);
+  const labelW = 110;
+  const filas: [string, string][] = [
+    ['Código',         compra.codigo],
+    ['Estado',         compra.estado ?? '—'],
+    ['Cierre',         compra.fecha_cierre
+      ? new Date(compra.fecha_cierre).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' })
+      : '—'],
+  ];
 
-    // ── Datos de la compra ───────────────────────────────────────────────────
-    doc.moveDown(1.2);
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(negro).text('COMPRA ÁGIL');
-    doc.moveDown(0.3);
+  for (const [label, valor] of filas) {
+    write(`${label}:`, L, y, 9, regular, GRIS);
+    write(valor, L + labelW, y, 9, regular, NEGRO);
+    y -= 13;
+  }
 
-    const infoCompra = [
-      ['Código', compra.codigo],
-      ['Descripción', compra.nombre],
-      ['Estado', compra.estado ?? '—'],
-      ['Monto estimado', compra.monto != null ? formatCLP(compra.monto) : '—'],
-      ['Fecha de cierre', compra.fecha_cierre
-        ? new Date(compra.fecha_cierre).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' })
-        : '—'],
-    ];
+  // Nombre de la compra (puede ser largo)
+  write('Descripción:', L, y, 9, regular, GRIS);
+  const nombreLineas = compra.nombre.match(/.{1,70}/g) ?? [compra.nombre];
+  for (const linea of nombreLineas.slice(0, 3)) {
+    write(linea, L + labelW, y, 9, regular, NEGRO);
+    y -= 12;
+  }
+  y -= 10;
 
-    doc.fontSize(9).font('Helvetica').fillColor(negro);
-    for (const [label, valor] of infoCompra) {
-      doc.text(`${label}:`, 50, doc.y, { continued: true, width: 110 });
-      doc.font('Helvetica').fillColor(negro).text(valor, { width: pageWidth - 110 });
-      doc.font('Helvetica').fillColor(negro);
-    }
+  // ── Tabla productos ───────────────────────────────────────────────────────
+  write('PRODUCTOS', L, y, 10, bold);
+  y -= 14;
 
-    // ── Tabla de productos ───────────────────────────────────────────────────
-    doc.moveDown(1.2);
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(negro).text('PRODUCTOS');
-    doc.moveDown(0.5);
+  const COL = { prod: L, cant: L + 230, precio: L + 300, sub: L + 400 };
+  const COL_W = { prod: 220, cant: 60, precio: 95, sub: W - 400 };
+  const ROW = 18;
 
-    const COL = { producto: 50, cant: 290, precioUnit: 360, subtotal: 450 };
-    const COL_W = { producto: 230, cant: 60, precioUnit: 85, subtotal: 85 };
-    const ROW_H = 18;
+  // Cabecera
+  page.drawRectangle({ x: L, y: y - 4, width: W, height: ROW, color: FONDO });
+  write('Producto',     COL.prod,   y, 8, bold, GRIS);
+  write('Cant.',        COL.cant,   y, 8, bold, GRIS);
+  write('Precio unit.', COL.precio, y, 8, bold, GRIS);
+  write('Subtotal',     COL.sub,    y, 8, bold, GRIS);
+  y -= ROW;
+  page.drawLine({ start: { x: L, y: y + 2 }, end: { x: R, y: y + 2 }, thickness: 0.4, color: LINEA });
 
-    // Cabecera tabla
-    let y = doc.y;
-    doc.rect(50, y - 2, pageWidth, ROW_H).fill('#f3f4f6');
-    doc.fontSize(8).font('Helvetica-Bold').fillColor('#374151');
-    doc.text('Producto', COL.producto, y, { width: COL_W.producto, lineBreak: false });
-    doc.text('Cant.', COL.cant, y, { width: COL_W.cant, align: 'center', lineBreak: false });
-    doc.text('Precio unit.', COL.precioUnit, y, { width: COL_W.precioUnit, align: 'right', lineBreak: false });
-    doc.text('Subtotal', COL.subtotal, y, { width: COL_W.subtotal, align: 'right', lineBreak: false });
-    y += ROW_H + 2;
+  // Filas
+  for (let i = 0; i < productos.length; i++) {
+    const p = productos[i];
+    if (i % 2 === 0) page.drawRectangle({ x: L, y: y - 4, width: W, height: ROW, color: rgb(0.98, 0.98, 0.99) });
+    write(p.nombre.substring(0, 38),        COL.prod,   y, 8, regular, NEGRO);
+    write(String(p.cantidad),               COL.cant,   y, 8, regular, NEGRO);
+    write(formatCLP(p.precio_unitario),     COL.precio, y, 8, regular, NEGRO);
+    write(formatCLP(p.subtotal),            COL.sub,    y, 8, regular, NEGRO);
+    y -= ROW;
+  }
 
-    // Filas
-    doc.font('Helvetica').fillColor(negro).fontSize(8);
-    for (let i = 0; i < productos.length; i++) {
-      const p = productos[i];
-      if (i % 2 === 0) doc.rect(50, y - 2, pageWidth, ROW_H).fill('#fafafa');
+  // Fila total
+  y -= 4;
+  page.drawLine({ start: { x: L, y }, end: { x: R, y }, thickness: 0.5, color: NEGRO });
+  y -= 14;
+  write('TOTAL', COL.prod, y, 10, bold, NEGRO);
+  write(formatCLP(total), COL.sub, y, 10, bold, NEGRO);
 
-      doc.fillColor(negro);
-      doc.text(p.nombre, COL.producto, y, { width: COL_W.producto, lineBreak: false });
-      doc.text(String(p.cantidad), COL.cant, y, { width: COL_W.cant, align: 'center', lineBreak: false });
-      doc.text(formatCLP(p.precio_unitario), COL.precioUnit, y, { width: COL_W.precioUnit, align: 'right', lineBreak: false });
-      doc.text(formatCLP(p.subtotal), COL.subtotal, y, { width: COL_W.subtotal, align: 'right', lineBreak: false });
-      y += ROW_H;
-    }
+  // ── Pie ──────────────────────────────────────────────────────────────────
+  const pieY = 35;
+  page.drawLine({ start: { x: L, y: pieY + 12 }, end: { x: R, y: pieY + 12 }, thickness: 0.4, color: LINEA });
+  write('Propuesta generada por Mercado Público Dashboard', L + W / 2 - 130, pieY, 8, regular, GRIS);
 
-    // Fila total
-    y += 4;
-    doc.moveTo(50, y).lineTo(545, y).strokeColor('#d1d5db').stroke();
-    y += 6;
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(negro);
-    doc.text('TOTAL', COL.producto, y, { width: COL_W.producto + COL_W.cant + COL_W.precioUnit, lineBreak: false });
-    doc.text(formatCLP(total), COL.subtotal, y, { width: COL_W.subtotal, align: 'right', lineBreak: false });
-
-    // ── Pie ──────────────────────────────────────────────────────────────────
-    doc.fontSize(8).font('Helvetica').fillColor(gris);
-    const pieY = doc.page.height - 60;
-    doc.moveTo(50, pieY).lineTo(545, pieY).strokeColor('#e5e7eb').stroke();
-    doc.text('Propuesta generada por Mercado Público Dashboard', 50, pieY + 8, {
-      width: pageWidth,
-      align: 'center',
-    });
-
-    doc.end();
-  });
+  return doc.save();
 }
 
 export async function GET(
@@ -137,7 +138,6 @@ export async function GET(
 
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceKey);
 
-  // Cargar propuesta
   const { data: propuesta, error: e1 } = await supabase
     .from('propuestas')
     .select('user_id, compra_agil_id, productos_propuestos_json, monto_total')
@@ -148,11 +148,10 @@ export async function GET(
     return NextResponse.json({ error: 'Propuesta no encontrada' }, { status: 404 });
   }
 
-  // Cargar compra y usuario en paralelo
   const [{ data: compra }, { data: usuario }] = await Promise.all([
     supabase
       .from('compras_agiles')
-      .select('codigo, nombre, estado, monto, fecha_cierre')
+      .select('codigo, nombre, estado, fecha_cierre')
       .eq('id', propuesta.compra_agil_id)
       .single(),
     supabase
@@ -163,13 +162,13 @@ export async function GET(
   ]);
 
   if (!compra || !usuario) {
-    return NextResponse.json({ error: 'Datos incompletos para generar el PDF' }, { status: 404 });
+    return NextResponse.json({ error: 'Datos incompletos' }, { status: 404 });
   }
 
   const productos = (propuesta.productos_propuestos_json ?? []) as ProductoPropuesto[];
-  const buffer = await generarPDF(usuario, compra, productos, propuesta.monto_total);
+  const pdfBytes = await generarPDF(usuario, compra, productos, propuesta.monto_total);
 
-  return new Response(new Uint8Array(buffer), {
+  return new Response(pdfBytes, {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="propuesta-${compra.codigo}.pdf"`,
