@@ -135,7 +135,7 @@ export default async function DashboardPage() {
                   </span>
                 </td>
                 <td style={td}>
-                  <Link href={`/dashboard/${f.compra.id}`} style={{ color: '#1d4ed8', textDecoration: 'none' }}>
+                  <Link href={`/dashboard/compra/${encodeURIComponent(f.compra.codigo)}`} style={{ color: '#1d4ed8', textDecoration: 'none' }}>
                     {f.compra.codigo}
                   </Link>
                 </td>
