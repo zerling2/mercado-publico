@@ -36,7 +36,7 @@ function matchProductos(nombreCompra: string, catalogo: ItemCatalogo[]): Product
       // Cuántas palabras del producto aparecen en el texto de la compra
       const hits = palabrasItem.filter(w => palabrasCompra.has(w)).length;
       // Cuántas palabras de la compra aparecen en el nombre del producto
-      const hitsReverso = [...palabrasCompra].filter(w =>
+      const hitsReverso = Array.from(palabrasCompra).filter(w =>
         normalizarTexto(item.nombre).includes(w)
       ).length;
       return { item, score: Math.max(hits, hitsReverso) };
