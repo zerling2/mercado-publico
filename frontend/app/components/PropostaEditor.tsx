@@ -85,13 +85,13 @@ export default function PropostaEditor({ userId, compraId, productosIniciales, c
           monto_total: estado === 'rechazada' ? 0 : total,
         }),
       });
-      if (!res.ok) throw new Error('Error al guardar');
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error al guardar');
       setPropuestaId(data.id ?? null);
       setGuardado(estado);
       setEditando(false);
-    } catch {
-      alert('Error al guardar la propuesta');
+    } catch (err) {
+      alert(`Error al guardar: ${err instanceof Error ? err.message : 'desconocido'}`);
     } finally {
       setGuardando(false);
     }
