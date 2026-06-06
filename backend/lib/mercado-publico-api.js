@@ -22,6 +22,7 @@ export async function fetchComprasAgiles() {
         params: {
           publicado_desde: desde,
           publicado_hasta: hasta,
+          region: CONFIG.mercadoPublico.region,
           tamano_pagina: 50,
           numero_pagina: paginaActual,
         },
