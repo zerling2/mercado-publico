@@ -7,7 +7,6 @@ interface CompraAgil {
   nombre: string;
   estado: string;
   monto: number | null;
-  organismo: string | null;
   fecha_publicacion: string | null;
   fecha_cierre: string | null;
 }
