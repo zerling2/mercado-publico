@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { supabase } from '../lib/supabase-client';
 
 interface CompraAgil {
@@ -72,14 +73,14 @@ export default async function Page() {
   );
 }
 
-const th: React.CSSProperties = {
+const th: CSSProperties = {
   padding: '0.75rem 1rem',
   textAlign: 'left',
   fontWeight: 600,
   fontSize: '0.85rem',
 };
 
-const td: React.CSSProperties = {
+const td: CSSProperties = {
   padding: '0.65rem 1rem',
   fontSize: '0.875rem',
   borderBottom: '1px solid #f0f0f0',
