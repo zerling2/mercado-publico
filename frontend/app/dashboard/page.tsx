@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
-import { supabase } from '../../lib/supabase-client';
+import { supabaseServer as supabase } from '../../lib/supabase-server';
 
 const EMAIL_GUIDO = 'guido@imprentayvestuario.cl';
 
