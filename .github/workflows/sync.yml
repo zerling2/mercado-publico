@@ -1,0 +1,32 @@
+name: Sync Compras Ágiles
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # cada hora
+  workflow_dispatch:       # ejecución manual desde GitHub
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm install
+
+      - name: Run incremental sync
+        working-directory: backend
+        env:
+          SYNC_MODE: incremental
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MERCADO_PUBLICO_TICKET: ${{ secrets.MERCADO_PUBLICO_TICKET }}
+          REGION_FILTER: ${{ secrets.REGION_FILTER }}
+        run: npm run sync

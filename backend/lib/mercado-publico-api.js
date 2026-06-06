@@ -8,8 +8,21 @@ const TICKET = CONFIG.mercadoPublico.ticket;
 // Auth: header 'ticket' (doc sección 3.1)
 // Respuesta: { success, payload: { items[], paginacion } }
 export async function fetchComprasAgiles() {
-  const desde = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
-  const hasta = new Date().toISOString();
+  const mode = process.env.SYNC_MODE || 'incremental';
+  const ahora = new Date();
+
+  let rangoParams;
+  if (mode === 'historic') {
+    // Histórico 180 días (para primer sync manual)
+    const desde = new Date(ahora - 180 * 24 * 60 * 60 * 1000).toISOString();
+    rangoParams = { publicado_desde: desde, publicado_hasta: ahora.toISOString() };
+    console.log('🗂️  Modo histórico — últimos 180 días');
+  } else {
+    // Cambios últimas 2 horas (para GitHub Actions)
+    const desde = new Date(ahora - 2 * 60 * 60 * 1000).toISOString();
+    rangoParams = { cambio_desde: desde, cambio_hasta: ahora.toISOString() };
+    console.log('⚡ Modo incremental — últimas 2 horas');
+  }
 
   const allItems = [];
   let paginaActual = 1;
@@ -20,8 +33,7 @@ export async function fetchComprasAgiles() {
       const response = await axios.get(`${API_V2}/v2/compra-agil`, {
         headers: { ticket: TICKET },
         params: {
-          publicado_desde: desde,
-          publicado_hasta: hasta,
+          ...rangoParams,
           region: CONFIG.mercadoPublico.region,
           tamano_pagina: 50,
           numero_pagina: paginaActual,
@@ -43,9 +55,9 @@ export async function fetchComprasAgiles() {
 
       console.log(`   Página ${paginaActual}/${totalPaginas} — ${items.length} items`);
       paginaActual++;
-    } while (paginaActual <= Math.min(totalPaginas, 10));
+    } while (paginaActual <= Math.min(totalPaginas, 6));
 
-    console.log(`✅ Compras ágiles obtenidas: ${allItems.length} (últimos 180 días)`);
+    console.log(`✅ Compras ágiles obtenidas: ${allItems.length} (modo: ${mode})`);
     return allItems;
   } catch (error) {
     console.error('❌ Error fetching compras ágiles:', error.message);
