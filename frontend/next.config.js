@@ -1,1 +1,4 @@
-export default {}
+/** @type {import('next').NextConfig} */
+export default {
+  serverExternalPackages: ['pdfkit'],
+};
