@@ -168,9 +168,8 @@ export async function GET(
   const productos = (propuesta.productos_propuestos_json ?? []) as ProductoPropuesto[];
   const pdfBytes = await generarPDF(usuario, compra, productos, propuesta.monto_total);
 
-  return new Response(pdfBytes, {
+  return new Response(new Blob([pdfBytes], { type: 'application/pdf' }), {
     headers: {
-      'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="propuesta-${compra.codigo}.pdf"`,
     },
   });
