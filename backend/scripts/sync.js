@@ -126,15 +126,16 @@ async function main() {
   console.log('\n========== SINCRONIZACIÓN INICIADA ==========');
   console.log(new Date().toISOString());
 
+  // MVP: solo sincroniza Compras Ágiles. Licitaciones y Órdenes fase 2.
   try {
     const comprasInsertadas = await syncComprasAgiles();
     await logSync('compras_agiles', comprasInsertadas, 'exitoso');
 
-    const licitacionesInsertadas = await syncLicitaciones();
-    await logSync('licitaciones', licitacionesInsertadas, 'exitoso');
+    // const licitacionesInsertadas = await syncLicitaciones();
+    // await logSync('licitaciones', licitacionesInsertadas, 'exitoso');
 
-    const ordenesInsertadas = await syncOrdenesCompra();
-    await logSync('ordenes_compra', ordenesInsertadas, 'exitoso');
+    // const ordenesInsertadas = await syncOrdenesCompra();
+    // await logSync('ordenes_compra', ordenesInsertadas, 'exitoso');
 
     console.log('\n========== SINCRONIZACIÓN COMPLETADA ==========\n');
   } catch (error) {
