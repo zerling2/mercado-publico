@@ -4,19 +4,23 @@ import { supabaseServer as supabase } from '../../lib/supabase-server';
 
 const EMAIL_GUIDO = 'guido@imprentayvestuario.cl';
 
-interface CompraRelevante {
+interface Relevancia {
+  compra_agil_id: string;
   relevancia_score: number;
   razon_match: string | null;
-  fecha_descubierta: string;
-  compra_agil_id: string;
-  compras_agiles: {
-    id: string;
-    codigo: string;
-    nombre: string;
-    estado: string | null;
-    monto: number | null;
-    fecha_cierre: string | null;
-  } | null;
+}
+
+interface CompraAgil {
+  id: string;
+  codigo: string;
+  nombre: string;
+  estado: string | null;
+  monto: number | null;
+  fecha_cierre: string | null;
+}
+
+interface Fila extends Relevancia {
+  compra: CompraAgil;
 }
 
 async function getUsuarioId(): Promise<string | null> {
@@ -28,27 +32,36 @@ async function getUsuarioId(): Promise<string | null> {
   return data?.id ?? null;
 }
 
-async function getComprasRelevantes(userId: string): Promise<CompraRelevante[]> {
-  const { data, error } = await supabase
+async function getFilas(userId: string): Promise<Fila[]> {
+  const { data: relevancia, error: r1 } = await supabase
     .from('relevancia_compras')
-    .select(`
-      relevancia_score,
-      razon_match,
-      fecha_descubierta,
-      compra_agil_id,
-      compras_agiles (
-        id, codigo, nombre, estado, monto, fecha_cierre
-      )
-    `)
+    .select('compra_agil_id, relevancia_score, razon_match')
     .eq('user_id', userId)
     .order('relevancia_score', { ascending: false })
     .limit(100);
 
-  if (error) {
-    console.error('Error cargando relevancia:', error.message);
+  if (r1 || !relevancia?.length) {
+    if (r1) console.error('Error relevancia:', r1.message);
     return [];
   }
-  return (data ?? []) as unknown as CompraRelevante[];
+
+  const ids = relevancia.map(r => r.compra_agil_id);
+
+  const { data: compras, error: r2 } = await supabase
+    .from('compras_agiles')
+    .select('id, codigo, nombre, estado, monto, fecha_cierre')
+    .in('id', ids);
+
+  if (r2 || !compras) {
+    console.error('Error compras:', r2?.message);
+    return [];
+  }
+
+  const comprasById = Object.fromEntries(compras.map(c => [c.id, c]));
+
+  return relevancia
+    .map(r => ({ ...r, compra: comprasById[r.compra_agil_id] }))
+    .filter(r => r.compra != null) as Fila[];
 }
 
 function colorScore(score: number): string {
@@ -68,7 +81,7 @@ export default async function DashboardPage() {
     );
   }
 
-  const compras = await getComprasRelevantes(userId);
+  const filas = await getFilas(userId);
 
   return (
     <main style={main}>
@@ -80,13 +93,17 @@ export default async function DashboardPage() {
           Oportunidades para GUIDO
         </h1>
         <p style={{ color: '#666', margin: 0 }}>
-          {compras.length} compras ágiles relevantes · ordenadas por relevancia
+          {filas.length} compras ágiles relevantes · ordenadas por relevancia
         </p>
       </div>
 
-      {compras.length === 0 ? (
+      {filas.length === 0 ? (
         <p style={{ color: '#999' }}>
-          Sin resultados aún. Ejecuta <code>node scripts/buscar-relevancia.js</code> para analizar las compras.
+          Sin resultados aún. Visitá{' '}
+          <Link href="/api/buscar-relevancia" style={{ color: '#1d4ed8' }}>
+            /api/buscar-relevancia
+          </Link>{' '}
+          para analizar las compras.
         </p>
       ) : (
         <table style={tableStyle}>
@@ -102,43 +119,41 @@ export default async function DashboardPage() {
             </tr>
           </thead>
           <tbody>
-            {compras.map((c, i) => {
-              const ca = c.compras_agiles;
-              if (!ca) return null;
-              return (
-                <tr key={c.compra_agil_id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                  <td style={{ ...td, textAlign: 'center' }}>
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '2px 8px',
-                      borderRadius: 12,
-                      background: colorScore(c.relevancia_score) + '20',
-                      color: colorScore(c.relevancia_score),
-                      fontWeight: 700,
-                      fontSize: '0.8rem',
-                    }}>
-                      {c.relevancia_score}
-                    </span>
-                  </td>
-                  <td style={td}>
-                    <Link href={`/dashboard/${ca.id}`} style={{ color: '#1d4ed8', textDecoration: 'none' }}>
-                      {ca.codigo}
-                    </Link>
-                  </td>
-                  <td style={{ ...td, maxWidth: 280 }}>{ca.nombre}</td>
-                  <td style={td}>{ca.estado ?? '—'}</td>
-                  <td style={{ ...td, textAlign: 'right' }}>
-                    {ca.monto != null ? `$${ca.monto.toLocaleString('es-CL')}` : '—'}
-                  </td>
-                  <td style={td}>
-                    {ca.fecha_cierre ? new Date(ca.fecha_cierre).toLocaleDateString('es-CL') : '—'}
-                  </td>
-                  <td style={{ ...td, color: '#666', fontSize: '0.78rem', maxWidth: 200 }}>
-                    {c.razon_match ?? '—'}
-                  </td>
-                </tr>
-              );
-            })}
+            {filas.map((f, i) => (
+              <tr key={f.compra_agil_id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                <td style={{ ...td, textAlign: 'center' }}>
+                  <span style={{
+                    display: 'inline-block',
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: colorScore(f.relevancia_score) + '20',
+                    color: colorScore(f.relevancia_score),
+                    fontWeight: 700,
+                    fontSize: '0.8rem',
+                  }}>
+                    {f.relevancia_score}
+                  </span>
+                </td>
+                <td style={td}>
+                  <Link href={`/dashboard/${f.compra.id}`} style={{ color: '#1d4ed8', textDecoration: 'none' }}>
+                    {f.compra.codigo}
+                  </Link>
+                </td>
+                <td style={{ ...td, maxWidth: 280 }}>{f.compra.nombre}</td>
+                <td style={td}>{f.compra.estado ?? '—'}</td>
+                <td style={{ ...td, textAlign: 'right' }}>
+                  {f.compra.monto != null ? `$${f.compra.monto.toLocaleString('es-CL')}` : '—'}
+                </td>
+                <td style={td}>
+                  {f.compra.fecha_cierre
+                    ? new Date(f.compra.fecha_cierre).toLocaleDateString('es-CL')
+                    : '—'}
+                </td>
+                <td style={{ ...td, color: '#666', fontSize: '0.78rem', maxWidth: 200 }}>
+                  {f.razon_match ?? '—'}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       )}
