@@ -48,7 +48,7 @@ async function getComprasRelevantes(userId: string): Promise<CompraRelevante[]> 
     console.error('Error cargando relevancia:', error.message);
     return [];
   }
-  return (data ?? []) as CompraRelevante[];
+  return (data ?? []) as unknown as CompraRelevante[];
 }
 
 function colorScore(score: number): string {
