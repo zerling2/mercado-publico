@@ -8,25 +8,50 @@ const TICKET = CONFIG.mercadoPublico.ticket;
 // Auth: header 'ticket' (doc sección 3.1)
 // Respuesta: { success, payload: { items[], paginacion } }
 export async function fetchComprasAgiles() {
+  const desde = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+  const hasta = new Date().toISOString();
+
+  const allItems = [];
+  let paginaActual = 1;
+  let totalPaginas = 1;
+
   try {
-    const response = await axios.get(`${API_V2}/v2/compra-agil`, {
-      headers: { ticket: TICKET },
-      params: { ttl_cambio_ms: 3600000 },
-    });
+    do {
+      const response = await axios.get(`${API_V2}/v2/compra-agil`, {
+        headers: { ticket: TICKET },
+        params: {
+          publicado_desde: desde,
+          publicado_hasta: hasta,
+          tamano_pagina: 50,
+          numero_pagina: paginaActual,
+        },
+      });
 
-    const raw = response.data;
-    console.log('📦 Compras ágiles — estructura recibida:', JSON.stringify(raw).slice(0, 600));
+      const raw = response.data;
 
-    const items = raw?.payload?.items ?? [];
-    console.log(`✅ Compras ágiles obtenidas: ${items.length}`);
-    return items;
+      if (paginaActual === 1) {
+        console.log('📦 Compras ágiles — estructura recibida:', JSON.stringify(raw).slice(0, 600));
+      }
+
+      const items = raw?.payload?.items ?? [];
+      const paginacion = raw?.payload?.paginacion;
+
+      allItems.push(...items);
+      totalPaginas = paginacion?.total_paginas ?? 1;
+
+      console.log(`   Página ${paginaActual}/${totalPaginas} — ${items.length} items`);
+      paginaActual++;
+    } while (paginaActual <= totalPaginas);
+
+    console.log(`✅ Compras ágiles obtenidas: ${allItems.length} (últimos 180 días)`);
+    return allItems;
   } catch (error) {
     console.error('❌ Error fetching compras ágiles:', error.message);
     if (error.response) {
       console.error('   Status:', error.response.status);
       console.error('   Body:', JSON.stringify(error.response.data).slice(0, 500));
     }
-    return [];
+    return allItems;
   }
 }
 
