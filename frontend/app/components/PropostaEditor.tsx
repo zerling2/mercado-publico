@@ -34,6 +34,7 @@ export default function PropostaEditor({ userId, compraId, productosIniciales, c
   const [busqueda, setBusqueda] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState<'aceptada' | 'rechazada' | null>(null);
+  const [propuestaId, setPropuestaId] = useState<string | null>(null);
 
   const total = productos.reduce((sum, p) => sum + p.subtotal, 0);
 
@@ -85,6 +86,8 @@ export default function PropostaEditor({ userId, compraId, productosIniciales, c
         }),
       });
       if (!res.ok) throw new Error('Error al guardar');
+      const data = await res.json();
+      setPropuestaId(data.id ?? null);
       setGuardado(estado);
       setEditando(false);
     } catch {
@@ -106,10 +109,15 @@ export default function PropostaEditor({ userId, compraId, productosIniciales, c
   if (guardado) {
     return (
       <div style={card}>
-        <p style={{ textAlign: 'center', padding: '2rem', color: guardado === 'aceptada' ? '#15803d' : '#9ca3af' }}>
+        <p style={{ textAlign: 'center', padding: '2rem 2rem 1rem', color: guardado === 'aceptada' ? '#15803d' : '#9ca3af' }}>
           {guardado === 'aceptada' ? '✅ Propuesta guardada correctamente.' : '❌ Compra marcada como rechazada.'}
         </p>
-        <div style={{ textAlign: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', padding: '0 2rem 2rem', flexWrap: 'wrap' }}>
+          {guardado === 'aceptada' && propuestaId && (
+            <a href={`/api/propuestas/${propuestaId}/pdf`} target="_blank" rel="noopener noreferrer" style={btnPDF}>
+              📥 Descargar PDF
+            </a>
+          )}
           <button onClick={() => router.push('/dashboard')} style={btnSecundario}>
             ← Volver al dashboard
           </button>
@@ -258,3 +266,4 @@ const btnEliminar = { background: 'none', border: 'none', color: '#9ca3af', curs
 const btnAceptar = { padding: '0.65rem 1.5rem', background: '#15803d', color: '#fff', border: 'none', borderRadius: 8, fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600 };
 const btnRechazar = { padding: '0.65rem 1.5rem', background: '#fff', color: '#dc2626', border: '1px solid #dc2626', borderRadius: 8, fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600 };
 const btnSecundario = { padding: '0.5rem 1rem', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 6, fontSize: '0.85rem', cursor: 'pointer' };
+const btnPDF = { padding: '0.5rem 1.25rem', background: '#1d4ed8', color: '#fff', borderRadius: 6, fontSize: '0.85rem', textDecoration: 'none', fontWeight: 600 };
