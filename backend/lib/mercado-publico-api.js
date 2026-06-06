@@ -38,10 +38,11 @@ export async function fetchComprasAgiles() {
 
       allItems.push(...items);
       totalPaginas = paginacion?.total_paginas ?? 1;
+      const maxPaginas = Math.min(totalPaginas, 10);
 
       console.log(`   Página ${paginaActual}/${totalPaginas} — ${items.length} items`);
       paginaActual++;
-    } while (paginaActual <= totalPaginas);
+    } while (paginaActual <= Math.min(totalPaginas, 10));
 
     console.log(`✅ Compras ágiles obtenidas: ${allItems.length} (últimos 180 días)`);
     return allItems;
