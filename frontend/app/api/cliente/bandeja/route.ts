@@ -39,11 +39,7 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
 
   const { data: cotizaciones, error: cotError } = await sb()
-    .from('cotizaciones')
-    .select('id, token, estado, enviada_at, respondida_at, postulada_at, notas, compra_agil_id')
-    .eq('user_id', empresa_id)
-    .neq('estado', 'borrador')
-    .order('enviada_at', { ascending: false });
+    .rpc('get_cotizaciones_empresa', { p_empresa_id: empresa_id });
 
   if (cotError) return NextResponse.json({ error: cotError.message }, { status: 500 });
 
