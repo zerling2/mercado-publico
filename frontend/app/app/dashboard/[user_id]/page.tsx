@@ -45,18 +45,24 @@ interface Propuesta {
   compra?: { id: string; codigo: string; nombre: string };
 }
 
-// ─── Tokens ───────────────────────────────────────────────────────────────────
+// ─── Design tokens ────────────────────────────────────────────────────────────
 
-const BLUE = '#003DA5';
-const BLUE_DARK = '#00297A';
-const GREEN = '#059669';
-const AMBER = '#D97706';
-const RED = '#DC2626';
-const TEXT = '#111827';
-const MUTED = '#6B7280';
-const BORDER = '#E5E7EB';
-const BG = '#F9FAFB';
-const WHITE = '#FFFFFF';
+const NAVY    = '#001A4D';
+const BLUE    = '#0047CC';
+const BLUE2   = '#1A6BFF';
+const BLUEBG  = '#EEF3FF';
+const BLUEMID = '#DBEAFE';
+const WHITE   = '#FFFFFF';
+const BG      = '#F0F4FF';
+const TEXT    = '#0A0F1E';
+const MUTED   = '#5A6480';
+const BORDER  = '#D6E0F5';
+const GREEN   = '#027A48';
+const GREENBG = '#ECFDF3';
+const AMBER   = '#B45309';
+const AMBERBG = '#FFFBEB';
+const RED     = '#C01048';
+const REDBG   = '#FFF1F3';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -69,10 +75,8 @@ function pesos(n: number | null) {
 
 function diasParaCierre(fechaCierre: string | null): number | null {
   if (!fechaCierre) return null;
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  const cierre = new Date(fechaCierre);
-  cierre.setHours(0, 0, 0, 0);
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const cierre = new Date(fechaCierre); cierre.setHours(0, 0, 0, 0);
   return Math.ceil((cierre.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
 }
 
@@ -85,67 +89,73 @@ function portalUrl(codigo: string) {
   return `https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${encodeURIComponent(codigo)}`;
 }
 
-function scoreColor(score: number) {
-  if (score >= 60) return GREEN;
-  if (score >= 30) return AMBER;
-  return MUTED;
+function scoreConfig(score: number) {
+  if (score >= 60) return { color: GREEN, bg: GREENBG, label: 'ALTA' };
+  if (score >= 30) return { color: AMBER, bg: AMBERBG, label: 'MEDIA' };
+  return { color: MUTED, bg: BG, label: 'BAJA' };
 }
 
-function scoreLabel(score: number) {
-  if (score >= 60) return 'ALTA';
-  if (score >= 30) return 'MEDIA';
-  return 'BAJA';
-}
+// ─── Global styles injected once ─────────────────────────────────────────────
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+const GLOBAL_CSS = `
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: ${BG}; }
+  input, button, textarea, select { font-family: inherit; }
+  @media (min-width: 640px) {
+    .dash-root { max-width: 680px !important; }
+  }
+`;
+
+// ─── Shared button styles ─────────────────────────────────────────────────────
 
 const btnPrimary: React.CSSProperties = {
-  height: 44, borderRadius: 10, border: 'none', cursor: 'pointer',
-  background: BLUE, color: WHITE, fontFamily: 'inherit',
-  fontSize: '0.875rem', fontWeight: 600, padding: '0 16px',
+  height: 48, borderRadius: 12, border: 'none', cursor: 'pointer',
+  background: BLUE, color: WHITE, fontSize: '0.9rem', fontWeight: 700,
+  padding: '0 20px', letterSpacing: '0.01em',
 };
 
-const btnSecondary: React.CSSProperties = {
-  height: 44, borderRadius: 10, cursor: 'pointer', background: WHITE,
-  color: BLUE, fontFamily: 'inherit', fontSize: '0.875rem', fontWeight: 600,
-  padding: '0 16px', border: `1.5px solid ${BLUE}`,
+const btnOutline: React.CSSProperties = {
+  height: 48, borderRadius: 12, cursor: 'pointer', background: WHITE,
+  color: BLUE, fontSize: '0.9rem', fontWeight: 700,
+  padding: '0 20px', border: `2px solid ${BLUE}`,
 };
 
 const inputStyle: React.CSSProperties = {
-  height: 44, borderRadius: 10, border: `1.5px solid ${BORDER}`,
-  padding: '0 14px', fontSize: '0.9rem', width: '100%', boxSizing: 'border-box',
-  fontFamily: 'inherit', color: TEXT,
+  height: 48, borderRadius: 12, border: `1.5px solid ${BORDER}`,
+  padding: '0 14px', fontSize: '0.95rem', width: '100%',
+  color: TEXT, background: WHITE, outline: 'none',
 };
 
 // ─── TabBar ───────────────────────────────────────────────────────────────────
 
-function TabBar({ active, onChange, counts }: {
-  active: number;
-  onChange: (i: number) => void;
-  counts: [number, number];
+function TabBar({ active, onChange, counts, noVistas }: {
+  active: number; onChange: (i: number) => void;
+  counts: [number, number]; noVistas: number;
 }) {
   const tabs = [
-    { label: 'Oportunidades', count: counts[0] },
+    { label: 'Oportunidades', count: noVistas },
     { label: 'Propuestas', count: counts[1] },
     { label: 'Perfil', count: 0 },
   ];
   return (
-    <div style={{ display: 'flex', borderBottom: `1px solid ${BORDER}`, background: WHITE }}>
+    <div style={{ display: 'flex', background: WHITE, borderBottom: `1.5px solid ${BORDER}` }}>
       {tabs.map((t, i) => (
         <button key={t.label} onClick={() => onChange(i)} style={{
-          flex: 1, height: 48, border: 'none', background: 'none', cursor: 'pointer',
-          fontSize: '0.85rem', fontWeight: active === i ? 700 : 400,
+          flex: 1, height: 52, border: 'none', background: 'none', cursor: 'pointer',
+          fontSize: '0.82rem', fontWeight: active === i ? 800 : 500,
           color: active === i ? BLUE : MUTED,
-          borderBottom: active === i ? `2px solid ${BLUE}` : '2px solid transparent',
-          fontFamily: 'inherit', position: 'relative',
+          borderBottom: active === i ? `3px solid ${BLUE}` : '3px solid transparent',
+          position: 'relative', transition: 'color 0.15s',
         }}>
           {t.label}
           {t.count > 0 && (
             <span style={{
-              marginLeft: 4, background: active === i ? BLUE : BORDER,
-              color: active === i ? WHITE : MUTED,
-              fontSize: '0.7rem', fontWeight: 700, padding: '1px 6px',
-              borderRadius: 99, verticalAlign: 'middle',
+              marginLeft: 5,
+              background: active === i ? BLUE : RED,
+              color: WHITE,
+              fontSize: '0.65rem', fontWeight: 800,
+              padding: '2px 6px', borderRadius: 99,
+              verticalAlign: 'middle',
             }}>
               {t.count}
             </span>
@@ -156,13 +166,10 @@ function TabBar({ active, onChange, counts }: {
   );
 }
 
-// ─── Detalle Compra (fetched from MP API) ────────────────────────────────────
+// ─── Detalle Compra ───────────────────────────────────────────────────────────
 
 interface DetalleCompra {
-  codigo: string;
-  nombre: string;
-  descripcion: string | null;
-  estado: string;
+  codigo: string; nombre: string; descripcion: string | null; estado: string;
   organismo: { nombre: string | null; rut: string | null; region: string | null; comuna: string | null };
   monto: number | null;
   fechas: { publicacion: string; cierre: string; fin_preguntas: string };
@@ -170,8 +177,7 @@ interface DetalleCompra {
   condiciones: { plazo_entrega: string | null; forma_pago: string | null; garantia: string | null; lugar_entrega: string | null };
   contacto: { nombre?: string; email?: string; fono?: string } | null;
   documentos: Array<{ nombre: string; url: string; tipo: string }>;
-  _fuente?: string;
-  _aviso?: string;
+  _fuente?: string; _aviso?: string;
 }
 
 function DetallePanel({ codigo }: { codigo: string }) {
@@ -182,150 +188,120 @@ function DetallePanel({ codigo }: { codigo: string }) {
   useEffect(() => {
     fetch(`/api/compras-agiles/${encodeURIComponent(codigo)}`)
       .then(r => r.json())
-      .then(d => {
-        if (d._aviso) setAviso(d._aviso);
-        setDetalle(d);
-        setCargando(false);
-      })
+      .then(d => { if (d._aviso) setAviso(d._aviso); setDetalle(d); setCargando(false); })
       .catch(e => { setAviso(e.message); setCargando(false); });
   }, [codigo]);
 
   if (cargando) return (
-    <p style={{ color: MUTED, fontSize: '0.82rem', margin: '8px 0' }}>Cargando detalle…</p>
+    <p style={{ color: MUTED, fontSize: '0.85rem', margin: '12px 0', textAlign: 'center' }}>
+      Cargando detalle…
+    </p>
   );
 
-  const s = (v: string | null | undefined) => v || '—';
   const desdeBD = detalle?._fuente === 'base_de_datos';
 
   return (
-    <div style={{ fontSize: '0.83rem', lineHeight: 1.6 }}>
-      {/* Aviso de fuente / error */}
+    <div style={{ fontSize: '0.85rem', lineHeight: 1.65 }}>
       {aviso && (
-        <div style={{ background: desdeBD ? '#FEF9C3' : '#FEE2E2', borderRadius: 8,
-          padding: '8px 10px', marginBottom: 12, fontSize: '0.75rem', color: '#92400E' }}>
-          {desdeBD ? '⚠ ' : '✕ '}{aviso}
+        <div style={{ background: desdeBD ? AMBERBG : REDBG, borderRadius: 10,
+          padding: '10px 12px', marginBottom: 14, fontSize: '0.78rem',
+          color: desdeBD ? AMBER : RED, border: `1px solid ${desdeBD ? AMBER+'40' : RED+'40'}` }}>
+          {aviso}
         </div>
       )}
 
       {detalle && (
         <>
-          {/* Nombre completo */}
-          <Section title="Solicitud">
-            <p style={{ margin: 0, color: TEXT, fontWeight: 600, lineHeight: 1.4 }}>{detalle.nombre}</p>
-            <Field label="Código" value={detalle.codigo} />
-            <Field label="Estado" value={detalle.estado} />
-          </Section>
-
-          {/* Organismo */}
           {(detalle.organismo.nombre || detalle.organismo.region) && (
-            <Section title="Organismo comprador">
-              {detalle.organismo.nombre && <Field label="Entidad" value={detalle.organismo.nombre} bold />}
-              {detalle.organismo.rut && <Field label="RUT" value={detalle.organismo.rut} />}
-              {detalle.organismo.region && <Field label="Región" value={detalle.organismo.region} />}
-              {detalle.organismo.comuna && <Field label="Comuna" value={detalle.organismo.comuna} />}
-            </Section>
+            <DSection title="Organismo">
+              {detalle.organismo.nombre && <DField label="Entidad" value={detalle.organismo.nombre} bold />}
+              {detalle.organismo.rut && <DField label="RUT" value={detalle.organismo.rut} />}
+              {detalle.organismo.region && <DField label="Región" value={detalle.organismo.region} />}
+            </DSection>
           )}
 
-          {/* Descripción */}
           {detalle.descripcion && (
-            <Section title="Descripción">
-              <p style={{ margin: 0, color: TEXT, lineHeight: 1.55, whiteSpace: 'pre-line' }}>
+            <DSection title="Descripción">
+              <p style={{ margin: 0, color: TEXT, lineHeight: 1.6, whiteSpace: 'pre-line' }}>
                 {detalle.descripcion}
               </p>
-            </Section>
+            </DSection>
           )}
 
-          {/* Items */}
           {detalle.items.length > 0 && (
-            <Section title={`Ítems solicitados (${detalle.items.length})`}>
+            <DSection title={`Ítems solicitados (${detalle.items.length})`}>
               {detalle.items.map((it, i) => (
-                <div key={i} style={{ background: WHITE, borderRadius: 8, padding: '8px 10px',
+                <div key={i} style={{ background: BLUEBG, borderRadius: 10, padding: '10px 12px',
                   marginBottom: 6, border: `1px solid ${BORDER}` }}>
-                  <p style={{ margin: 0, fontWeight: 600, color: TEXT }}>{it.descripcion}</p>
+                  <p style={{ margin: 0, fontWeight: 700, color: TEXT }}>{it.descripcion}</p>
                   {it.cantidad && (
-                    <p style={{ margin: '2px 0 0', color: MUTED, fontSize: '0.78rem' }}>
-                      Cantidad: {it.cantidad} {it.unidad ?? ''}
+                    <p style={{ margin: '3px 0 0', color: MUTED, fontSize: '0.8rem' }}>
+                      {it.cantidad} {it.unidad ?? ''}
                     </p>
                   )}
                   {it.especificaciones && (
-                    <p style={{ margin: '2px 0 0', color: MUTED, fontSize: '0.78rem' }}>
+                    <p style={{ margin: '3px 0 0', color: MUTED, fontSize: '0.8rem' }}>
                       {it.especificaciones}
                     </p>
                   )}
                 </div>
               ))}
-            </Section>
+            </DSection>
           )}
 
-          {/* Fechas */}
-          <Section title="Fechas">
-            {detalle.fechas.publicacion !== '—' && <Field label="Publicación" value={detalle.fechas.publicacion} />}
-            <Field label="Cierre" value={detalle.fechas.cierre} bold />
-            {detalle.fechas.fin_preguntas !== '—' && <Field label="Fin preguntas" value={detalle.fechas.fin_preguntas} />}
-          </Section>
+          <DSection title="Fechas">
+            <DField label="Cierre" value={detalle.fechas.cierre} bold />
+            {detalle.fechas.publicacion !== '—' && <DField label="Publicación" value={detalle.fechas.publicacion} />}
+          </DSection>
 
-          {/* Monto */}
           {detalle.monto && (
-            <Section title="Presupuesto">
-              <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: BLUE }}>
+            <DSection title="Presupuesto">
+              <p style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: BLUE }}>
                 {pesos(detalle.monto)} CLP
               </p>
-            </Section>
+            </DSection>
           )}
 
-          {/* Documentos / Bases técnicas */}
           {detalle.documentos?.length > 0 && (
-            <Section title={`Bases técnicas y adjuntos (${detalle.documentos.length})`}>
+            <DSection title={`Adjuntos (${detalle.documentos.length})`}>
               {detalle.documentos.map((doc, i) => (
-                <a
-                  key={i}
-                  href={doc.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    background: WHITE, borderRadius: 10, padding: '10px 12px',
-                    marginBottom: 6, border: `1px solid ${BORDER}`,
-                    textDecoration: 'none', color: TEXT,
-                  }}
-                >
-                  <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>
-                    {doc.tipo?.includes('pdf') || doc.nombre?.toLowerCase().includes('.pdf') ? '📄' : '📎'}
+                <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: 10,
+                    background: WHITE, borderRadius: 10, padding: '10px 14px', marginBottom: 6,
+                    border: `1.5px solid ${BORDER}`, textDecoration: 'none' }}>
+                  <span style={{ fontSize: '1.3rem', flexShrink: 0 }}>
+                    {doc.nombre?.toLowerCase().includes('.pdf') ? '📄' : '📎'}
                   </span>
-                  <span style={{ flex: 1, fontSize: '0.83rem', fontWeight: 500, color: BLUE,
+                  <span style={{ flex: 1, fontSize: '0.83rem', fontWeight: 600, color: BLUE,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {doc.nombre}
                   </span>
-                  <span style={{ flexShrink: 0, fontSize: '0.75rem', color: MUTED }}>↓</span>
+                  <span style={{ color: MUTED, fontSize: '0.8rem', flexShrink: 0 }}>↓</span>
                 </a>
               ))}
-            </Section>
+            </DSection>
           )}
 
-          {/* Condiciones */}
           {Object.values(detalle.condiciones).some(Boolean) && (
-            <Section title="Condiciones">
-              {detalle.condiciones.plazo_entrega && <Field label="Plazo" value={detalle.condiciones.plazo_entrega} />}
-              {detalle.condiciones.forma_pago && <Field label="Pago" value={detalle.condiciones.forma_pago} />}
-              {detalle.condiciones.lugar_entrega && <Field label="Entrega" value={detalle.condiciones.lugar_entrega} />}
-              {detalle.condiciones.garantia && <Field label="Garantía" value={detalle.condiciones.garantia} />}
-            </Section>
+            <DSection title="Condiciones">
+              {detalle.condiciones.plazo_entrega && <DField label="Plazo" value={detalle.condiciones.plazo_entrega} />}
+              {detalle.condiciones.lugar_entrega && <DField label="Entrega" value={detalle.condiciones.lugar_entrega} />}
+              {detalle.condiciones.forma_pago && <DField label="Pago" value={detalle.condiciones.forma_pago} />}
+            </DSection>
           )}
 
-          {/* Contacto */}
           {detalle.contacto && (detalle.contacto.nombre || detalle.contacto.email) && (
-            <Section title="Contacto">
-              {detalle.contacto.nombre && <Field label="Nombre" value={detalle.contacto.nombre} />}
+            <DSection title="Contacto">
+              {detalle.contacto.nombre && <DField label="Nombre" value={detalle.contacto.nombre} />}
               {detalle.contacto.email && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 3 }}>
                   <span style={{ color: MUTED, minWidth: 72 }}>Email</span>
-                  <a href={`mailto:${detalle.contacto.email}`} style={{ color: BLUE, fontWeight: 500 }}>
+                  <a href={`mailto:${detalle.contacto.email}`} style={{ color: BLUE, fontWeight: 600 }}>
                     {detalle.contacto.email}
                   </a>
                 </div>
               )}
-              {detalle.contacto.fono && <Field label="Fono" value={detalle.contacto.fono} />}
-            </Section>
+            </DSection>
           )}
         </>
       )}
@@ -333,11 +309,11 @@ function DetallePanel({ codigo }: { codigo: string }) {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function DSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 14 }}>
-      <p style={{ margin: '0 0 6px', fontSize: '0.72rem', fontWeight: 700, color: MUTED,
-        textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+    <div style={{ marginBottom: 16 }}>
+      <p style={{ margin: '0 0 8px', fontSize: '0.7rem', fontWeight: 800, color: BLUE,
+        textTransform: 'uppercase', letterSpacing: '0.08em' }}>
         {title}
       </p>
       {children}
@@ -345,26 +321,28 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+function DField({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
-    <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
-      <span style={{ color: MUTED, minWidth: 72, flexShrink: 0 }}>{label}</span>
-      <span style={{ color: TEXT, fontWeight: bold ? 700 : 400 }}>{value}</span>
+    <div style={{ display: 'flex', gap: 8, marginBottom: 3 }}>
+      <span style={{ color: MUTED, minWidth: 80, flexShrink: 0, fontSize: '0.85rem' }}>{label}</span>
+      <span style={{ color: TEXT, fontWeight: bold ? 700 : 500, fontSize: '0.85rem' }}>{value}</span>
     </div>
   );
 }
 
 // ─── Oportunidad Card ─────────────────────────────────────────────────────────
 
-function OportunidadCard({ o, userId, onVisto }: { o: Oportunidad; userId: string; onVisto: (id: string) => void }) {
+function OportunidadCard({ o, userId, onVisto }: {
+  o: Oportunidad; userId: string; onVisto: (id: string) => void;
+}) {
   const [expandido, setExpandido] = useState(false);
   const c = o.compra;
   if (!c) return null;
 
   const dias = diasParaCierre(c.fecha_cierre);
-  const urgente = dias !== null && dias <= 3;
-  const pasado = dias !== null && dias < 0;
-  const color = scoreColor(o.relevancia_score);
+  const urgente = dias !== null && dias <= 3 && dias >= 0;
+  const pasado  = dias !== null && dias < 0;
+  const sc      = scoreConfig(o.relevancia_score);
 
   const handleExpand = async () => {
     const abriendo = !expandido;
@@ -381,114 +359,118 @@ function OportunidadCard({ o, userId, onVisto }: { o: Oportunidad; userId: strin
 
   return (
     <div style={{
-      background: WHITE, borderRadius: 14,
-      border: `1.5px solid ${!o.visto ? BLUE + '60' : BORDER}`,
-      marginBottom: 10, overflow: 'hidden',
-      boxShadow: !o.visto ? `0 0 0 1px ${BLUE}20` : 'none',
+      background: WHITE, borderRadius: 16,
+      border: `1.5px solid ${!o.visto ? BLUE + '50' : BORDER}`,
+      marginBottom: 12, overflow: 'hidden',
+      boxShadow: !o.visto
+        ? `0 2px 12px ${BLUE}18`
+        : '0 1px 4px rgba(0,0,0,0.06)',
     }}>
-      {/* Main row — tap to expand */}
-      <button
-        onClick={handleExpand}
-        style={{
-          width: '100%', textAlign: 'left', background: 'none', border: 'none',
-          cursor: 'pointer', padding: '14px 16px', fontFamily: 'inherit',
-          display: 'flex', gap: 12, alignItems: 'flex-start',
-        }}
-      >
+      <button onClick={handleExpand} style={{
+        width: '100%', textAlign: 'left', background: 'none', border: 'none',
+        cursor: 'pointer', padding: '16px', display: 'flex', gap: 14, alignItems: 'flex-start',
+      }}>
         {/* Score badge */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <div style={{
-            background: color + '15', border: `1px solid ${color}30`,
-            borderRadius: 8, padding: '4px 8px', textAlign: 'center', minWidth: 48,
+            background: sc.bg, borderRadius: 10, padding: '6px 10px',
+            textAlign: 'center', minWidth: 52,
+            border: `1.5px solid ${sc.color}30`,
           }}>
-            <div style={{ fontSize: '1rem', fontWeight: 800, color, lineHeight: 1 }}>{o.relevancia_score}</div>
-            <div style={{ fontSize: '0.6rem', fontWeight: 700, color, textTransform: 'uppercase', marginTop: 1 }}>
-              {scoreLabel(o.relevancia_score)}
+            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: sc.color, lineHeight: 1 }}>
+              {o.relevancia_score}
+            </div>
+            <div style={{ fontSize: '0.58rem', fontWeight: 800, color: sc.color,
+              textTransform: 'uppercase', marginTop: 2, letterSpacing: '0.05em' }}>
+              {sc.label}
             </div>
           </div>
-          {/* Unread blue dot */}
           {!o.visto && (
             <span style={{
-              position: 'absolute', top: -4, right: -4, width: 10, height: 10,
-              borderRadius: '50%', background: BLUE, border: `2px solid ${WHITE}`,
+              position: 'absolute', top: -5, right: -5, width: 12, height: 12,
+              borderRadius: '50%', background: RED, border: `2.5px solid ${WHITE}`,
+              animation: 'pulse 2s infinite',
             }} />
           )}
         </div>
 
         {/* Content */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: o.visto ? 600 : 700, color: TEXT,
-            lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          <p style={{
+            margin: 0, fontSize: '0.92rem', fontWeight: o.visto ? 600 : 800,
+            color: TEXT, lineHeight: 1.35,
+            display: '-webkit-box', WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          }}>
             {c.nombre}
           </p>
-          <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            {c.organismo_nombre && (
-              <span style={{ fontSize: '0.75rem', color: MUTED,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
-                {c.organismo_nombre}
-              </span>
-            )}
+
+          {c.organismo_nombre && (
+            <p style={{ margin: '4px 0 0', fontSize: '0.76rem', color: MUTED, fontWeight: 500,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {c.organismo_nombre}
+            </p>
+          )}
+
+          <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             {c.monto && (
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: TEXT }}>
+              <span style={{
+                fontSize: '0.88rem', fontWeight: 800, color: NAVY,
+                background: BLUEBG, padding: '2px 9px', borderRadius: 8,
+              }}>
                 {pesos(c.monto)}
               </span>
             )}
             {dias !== null && !pasado && (
               <span style={{
-                fontSize: '0.78rem', fontWeight: 600,
+                fontSize: '0.75rem', fontWeight: 700,
+                background: urgente ? REDBG : dias <= 7 ? AMBERBG : BG,
                 color: urgente ? RED : dias <= 7 ? AMBER : MUTED,
+                padding: '2px 8px', borderRadius: 8,
               }}>
-                {urgente ? `⚡ ${dias}d` : `${fechaCorta(c.fecha_cierre)}`}
+                {urgente ? `⚡ ${dias}d` : fechaCorta(c.fecha_cierre)}
               </span>
             )}
-            {pasado && <span style={{ fontSize: '0.78rem', color: MUTED }}>Vencida</span>}
-            {/* PDF downloaded indicator */}
+            {pasado && (
+              <span style={{ fontSize: '0.75rem', color: MUTED, background: BG,
+                padding: '2px 8px', borderRadius: 8 }}>
+                Vencida
+              </span>
+            )}
             {o.cotizacion_descargada && (
-              <span style={{ fontSize: '0.72rem', background: '#D1FAE5', color: '#065F46',
-                padding: '1px 7px', borderRadius: 99, fontWeight: 600 }}>
+              <span style={{ fontSize: '0.72rem', background: GREENBG, color: GREEN,
+                padding: '2px 8px', borderRadius: 8, fontWeight: 700 }}>
                 PDF ✓
               </span>
             )}
           </div>
+
           {o.razon_match && (
-            <p style={{ margin: '5px 0 0', fontSize: '0.72rem', color: BLUE }}>
+            <p style={{ margin: '6px 0 0', fontSize: '0.73rem', color: BLUE, fontWeight: 600 }}>
               {o.razon_match}
             </p>
           )}
-          {/* Comment preview */}
           {o.comentario && (
-            <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: MUTED,
-              fontStyle: 'italic', display: '-webkit-box', WebkitLineClamp: 1,
-              WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            <p style={{ margin: '4px 0 0', fontSize: '0.73rem', color: MUTED, fontStyle: 'italic',
+              display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
               "{o.comentario}"
             </p>
           )}
         </div>
 
-        {/* Chevron */}
-        <span style={{ flexShrink: 0, color: MUTED, fontSize: '0.85rem', paddingTop: 2,
-          transform: expandido ? 'rotate(180deg)' : 'none', transition: '0.2s' }}>
-          ▾
-        </span>
+        <span style={{ flexShrink: 0, color: MUTED, fontSize: '1rem', paddingTop: 2,
+          transform: expandido ? 'rotate(180deg)' : 'none', transition: '0.2s' }}>▾</span>
       </button>
 
-      {/* Expanded detail panel */}
       {expandido && (
-        <div style={{ borderTop: `1px solid ${BORDER}`, padding: '14px 16px 16px', background: BG }}>
-          {/* Action button */}
-          <div style={{ marginBottom: 16 }}>
-            <Link
-              href={`/app/cotizacion/${userId}/${encodeURIComponent(c.codigo)}`}
-              style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center',
-                height: 44, textDecoration: 'none', fontSize: '0.9rem', width: '100%',
-                justifyContent: 'center' }}
-            >
-              Cotizar / generar propuesta →
-            </Link>
-          </div>
-
-          {/* Full detail from MP API */}
+        <div style={{ borderTop: `1.5px solid ${BORDER}`, padding: '16px', background: BLUEBG }}>
+          <Link
+            href={`/app/cotizacion/${userId}/${encodeURIComponent(c.codigo)}`}
+            style={{ ...btnPrimary, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              textDecoration: 'none', marginBottom: 16, width: '100%' }}
+          >
+            Cotizar esta licitación →
+          </Link>
           <DetallePanel codigo={c.codigo} />
         </div>
       )}
@@ -498,19 +480,13 @@ function OportunidadCard({ o, userId, onVisto }: { o: Oportunidad; userId: strin
 
 // ─── Tab 1: Oportunidades ─────────────────────────────────────────────────────
 
-function OportunidadesTab({
-  userId,
-  usuario,
-  onCount,
-}: {
-  userId: string;
-  usuario: Usuario | null;
-  onCount: (n: number) => void;
+function OportunidadesTab({ userId, usuario, onCount, onNoVistas }: {
+  userId: string; usuario: Usuario | null;
+  onCount: (n: number) => void; onNoVistas: (n: number) => void;
 }) {
   const [oportunidades, setOportunidades] = useState<Oportunidad[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]   = useState(true);
   const [calculando, setCalculando] = useState(false);
-
   const [msg, setMsg] = useState('');
   const [filtro, setFiltro] = useState<'todas' | 'alta' | 'urgente' | 'novistas'>('todas');
 
@@ -522,102 +498,102 @@ function OportunidadesTab({
         const lista = Array.isArray(d) ? d : [];
         setOportunidades(lista);
         onCount(lista.length);
+        onNoVistas(lista.filter((o: Oportunidad) => !o.visto).length);
         setLoading(false);
       });
-  }, [userId, onCount]);
+  }, [userId, onCount, onNoVistas]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
   const calcular = async () => {
     if (!usuario) return;
-    setCalculando(true);
-    setMsg('');
+    setCalculando(true); setMsg('');
     const res = await fetch(`/api/clientes/${userId}/relevancia`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rubros: usuario.rubros_json ?? [] }),
     });
     const json = await res.json();
     setCalculando(false);
-    if (json.guardadas > 0) {
-      setMsg(`Encontradas ${json.guardadas} oportunidades`);
-      cargar();
-    } else {
-      setMsg('Sin nuevas oportunidades. Revisa los rubros en Perfil.');
-    }
+    setMsg(json.guardadas > 0
+      ? `Encontradas ${json.guardadas} oportunidades`
+      : 'Sin nuevas oportunidades. Revisa los rubros en Perfil.');
+    if (json.guardadas > 0) cargar();
   };
 
-
-  const marcarVisto = (relevanciaId: string) => {
-    setOportunidades(prev =>
-      prev.map(o => o.relevancia_id === relevanciaId ? { ...o, visto: true } : o)
-    );
+  const marcarVisto = (id: string) => {
+    setOportunidades(prev => prev.map(o => o.relevancia_id === id ? { ...o, visto: true } : o));
+    onNoVistas(oportunidades.filter(o => !o.visto && o.relevancia_id !== id).length);
   };
 
-  const noVistas = oportunidades.filter(o => !o.visto).length;
-
+  const noVistas  = oportunidades.filter(o => !o.visto).length;
   const filtradas = oportunidades.filter(o => {
-    if (filtro === 'alta') return o.relevancia_score >= 60;
-    if (filtro === 'urgente') {
-      const d = diasParaCierre(o.compra?.fecha_cierre ?? null);
-      return d !== null && d >= 0 && d <= 7;
-    }
+    if (filtro === 'alta')     return o.relevancia_score >= 60;
+    if (filtro === 'urgente')  { const d = diasParaCierre(o.compra?.fecha_cierre ?? null); return d !== null && d >= 0 && d <= 7; }
     if (filtro === 'novistas') return !o.visto;
     return true;
   });
 
   return (
     <div style={{ padding: '16px' }}>
-      {/* Actions row */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <button style={{ ...btnPrimary, flex: 1, fontSize: '0.85rem' }}
-          onClick={calcular} disabled={calculando}>
-          {calculando ? 'Buscando…' : '↻ Buscar oportunidades'}
-        </button>
-      </div>
+      {/* Search button */}
+      <button
+        style={{ ...btnPrimary, width: '100%', marginBottom: 14, fontSize: '0.92rem' }}
+        onClick={calcular} disabled={calculando}
+      >
+        {calculando ? 'Buscando oportunidades…' : '↻ Buscar oportunidades'}
+      </button>
+
+      {msg && (
+        <div style={{
+          background: msg.startsWith('Sin') ? AMBERBG : GREENBG,
+          border: `1px solid ${msg.startsWith('Sin') ? AMBER + '40' : GREEN + '40'}`,
+          borderRadius: 10, padding: '10px 14px', marginBottom: 12,
+          fontSize: '0.85rem', fontWeight: 600,
+          color: msg.startsWith('Sin') ? AMBER : GREEN,
+        }}>
+          {msg}
+        </div>
+      )}
 
       {/* Filter chips */}
       {oportunidades.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-          {[
-            { key: 'todas', label: `Todas (${oportunidades.length})` },
-            { key: 'novistas', label: `No vistas${noVistas > 0 ? ` (${noVistas})` : ''}` },
-            { key: 'alta', label: 'Alta relevancia' },
-            { key: 'urgente', label: '⚡ Urgentes' },
-          ].map(f => (
-            <button
-              key={f.key}
-              onClick={() => setFiltro(f.key as typeof filtro)}
-              style={{
-                height: 32, borderRadius: 99, border: `1px solid ${filtro === f.key ? BLUE : BORDER}`,
-                background: filtro === f.key ? BLUE : WHITE, color: filtro === f.key ? WHITE : MUTED,
-                fontSize: '0.75rem', fontWeight: 600, padding: '0 12px', cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
-            >
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+          {([
+            { key: 'todas',    label: `Todas (${oportunidades.length})` },
+            { key: 'novistas', label: `No vistas${noVistas > 0 ? ` · ${noVistas}` : ''}` },
+            { key: 'alta',     label: 'Alta relevancia' },
+            { key: 'urgente',  label: '⚡ Urgentes' },
+          ] as const).map(f => (
+            <button key={f.key} onClick={() => setFiltro(f.key)} style={{
+              height: 34, borderRadius: 99, cursor: 'pointer',
+              background: filtro === f.key ? BLUE : WHITE,
+              color: filtro === f.key ? WHITE : MUTED,
+              border: `1.5px solid ${filtro === f.key ? BLUE : BORDER}`,
+              fontSize: '0.78rem', fontWeight: 700, padding: '0 14px',
+            }}>
               {f.label}
             </button>
           ))}
         </div>
       )}
 
-      {msg && (
-        <p style={{ fontSize: '0.85rem', color: msg.startsWith('Error') ? RED : BLUE,
-          marginBottom: 10, fontWeight: 500 }}>{msg}</p>
-      )}
-
       {loading ? (
-        <p style={{ color: MUTED, textAlign: 'center', padding: 40 }}>Cargando…</p>
+        <div style={{ textAlign: 'center', padding: '48px 0', color: MUTED }}>
+          <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>⏳</div>
+          Cargando…
+        </div>
       ) : filtradas.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <p style={{ color: MUTED, fontSize: '1.5rem', margin: '0 0 12px' }}>🔍</p>
-          <p style={{ color: TEXT, fontWeight: 600, margin: '0 0 6px' }}>Sin oportunidades todavía</p>
-          <p style={{ color: MUTED, fontSize: '0.85rem', margin: 0 }}>
-            Presiona "Buscar" para analizar las compras ágiles del portal.
+        <div style={{ textAlign: 'center', padding: '48px 16px' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🔍</div>
+          <p style={{ color: TEXT, fontWeight: 700, fontSize: '1rem', margin: '0 0 6px' }}>
+            Sin oportunidades todavía
+          </p>
+          <p style={{ color: MUTED, fontSize: '0.88rem', margin: 0, lineHeight: 1.5 }}>
+            Presiona "Buscar oportunidades" para analizar<br />las compras ágiles del portal.
           </p>
           {!usuario?.rubros_json?.length && (
-            <p style={{ color: RED, fontSize: '0.85rem', marginTop: 8 }}>
-              ⚠ Agrega rubros en la pestaña Perfil para mejores resultados.
+            <p style={{ color: RED, fontSize: '0.85rem', marginTop: 12, fontWeight: 600 }}>
+              ⚠ Agrega rubros en Perfil para mejores resultados
             </p>
           )}
         </div>
@@ -637,22 +613,15 @@ function PropuestasTab({ userId, onCount }: { userId: string; onCount: (n: numbe
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/clientes/${userId}/propuestas`)
-      .then(r => r.json())
-      .then(d => {
-        const lista = Array.isArray(d) ? d : [];
-        setPropuestas(lista);
-        onCount(lista.length);
-        setLoading(false);
-      });
+    fetch(`/api/clientes/${userId}/propuestas`).then(r => r.json()).then(d => {
+      const lista = Array.isArray(d) ? d : [];
+      setPropuestas(lista); onCount(lista.length); setLoading(false);
+    });
   }, [userId, onCount]);
 
   const cambiarEstado = async (id: string, estado: string) => {
-    await fetch(`/api/propuestas/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado }),
-    });
+    await fetch(`/api/propuestas/${id}`, { method: 'PUT',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado }) });
     setPropuestas(prev => prev.map(p => p.id === id ? { ...p, estado } : p));
   };
 
@@ -660,42 +629,38 @@ function PropuestasTab({ userId, onCount }: { userId: string; onCount: (n: numbe
     if (!confirm('¿Eliminar esta propuesta?')) return;
     await fetch(`/api/propuestas/${id}`, { method: 'DELETE' });
     setPropuestas(prev => prev.filter(p => p.id !== id));
-    onCount(propuestas.length - 1);
   };
 
   const stats = {
     incompletas: propuestas.filter(p => p.estado === 'incompleta').length,
-    completas: propuestas.filter(p => p.estado === 'completa').length,
-    postuladas: propuestas.filter(p => p.estado === 'postulada').length,
+    completas:   propuestas.filter(p => p.estado === 'completa').length,
+    postuladas:  propuestas.filter(p => p.estado === 'postulada').length,
   };
 
-  const estadoBadge = (estado: string): React.CSSProperties => {
-    const map: Record<string, { bg: string; color: string }> = {
-      postulada:  { bg: '#D1FAE5', color: '#065F46' },
-      completa:   { bg: '#DBEAFE', color: '#1E40AF' },
-      incompleta: { bg: '#FEF3C7', color: '#92400E' },
+  const badgeStyle = (estado: string): React.CSSProperties => {
+    const m: Record<string, [string, string]> = {
+      postulada:  [GREENBG, GREEN],
+      completa:   [BLUEMID, BLUE],
+      incompleta: [AMBERBG, AMBER],
     };
-    const s = map[estado] ?? { bg: '#F3F4F6', color: MUTED };
-    return { fontSize: '0.7rem', fontWeight: 700, padding: '3px 10px', borderRadius: 99,
-      textTransform: 'uppercase', letterSpacing: '0.04em', background: s.bg, color: s.color };
+    const [bg, color] = m[estado] ?? [BG, MUTED];
+    return { fontSize: '0.68rem', fontWeight: 800, padding: '3px 10px', borderRadius: 99,
+      textTransform: 'uppercase', letterSpacing: '0.05em', background: bg, color };
   };
 
   return (
     <div style={{ padding: '16px' }}>
-      {/* Stats row */}
       {propuestas.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
           {[
-            { label: 'Borradores', n: stats.incompletas, color: AMBER },
-            { label: 'Completas', n: stats.completas, color: BLUE },
-            { label: 'Postuladas', n: stats.postuladas, color: GREEN },
+            { label: 'Borradores', n: stats.incompletas, color: AMBER, bg: AMBERBG },
+            { label: 'Completas',  n: stats.completas,   color: BLUE,  bg: BLUEMID },
+            { label: 'Postuladas', n: stats.postuladas,  color: GREEN, bg: GREENBG },
           ].map(s => (
-            <div key={s.label} style={{
-              flex: 1, background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
-              padding: '10px 8px', textAlign: 'center',
-            }}>
-              <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: s.color }}>{s.n}</p>
-              <p style={{ margin: 0, fontSize: '0.7rem', color: MUTED }}>{s.label}</p>
+            <div key={s.label} style={{ background: s.bg, borderRadius: 14,
+              padding: '14px 8px', textAlign: 'center', border: `1.5px solid ${s.color}20` }}>
+              <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: 900, color: s.color }}>{s.n}</p>
+              <p style={{ margin: 0, fontSize: '0.7rem', color: s.color, fontWeight: 600 }}>{s.label}</p>
             </div>
           ))}
         </div>
@@ -704,80 +669,64 @@ function PropuestasTab({ userId, onCount }: { userId: string; onCount: (n: numbe
       {loading ? (
         <p style={{ color: MUTED, textAlign: 'center', padding: 40 }}>Cargando…</p>
       ) : propuestas.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <p style={{ color: TEXT, fontWeight: 600, margin: '0 0 6px' }}>Sin propuestas</p>
-          <p style={{ color: MUTED, fontSize: '0.85rem', margin: '0 0 16px' }}>
+        <div style={{ textAlign: 'center', padding: '48px 16px' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📋</div>
+          <p style={{ color: TEXT, fontWeight: 700, margin: '0 0 6px' }}>Sin propuestas aún</p>
+          <p style={{ color: MUTED, fontSize: '0.88rem', margin: 0 }}>
             Genera una desde la pestaña Oportunidades.
           </p>
-          <Link href="/dashboard" style={{ color: BLUE, fontWeight: 600, fontSize: '0.9rem' }}>
-            Ir al generador →
-          </Link>
         </div>
       ) : (
         propuestas.map(p => (
-          <div key={p.id} style={{
-            background: WHITE, borderRadius: 14, border: `1px solid ${BORDER}`,
-            padding: '14px 16px', marginBottom: 10,
-          }}>
+          <div key={p.id} style={{ background: WHITE, borderRadius: 16,
+            border: `1.5px solid ${BORDER}`, padding: '16px', marginBottom: 10,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: TEXT,
+                <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: TEXT,
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {p.compra?.nombre ?? p.compra_agil_id}
                 </p>
-                <p style={{ margin: '2px 0 6px', fontSize: '0.75rem', color: MUTED }}>
+                <p style={{ margin: '3px 0 8px', fontSize: '0.76rem', color: MUTED }}>
                   {p.compra?.codigo} · {p.fecha ? fechaCorta(p.fecha) : '—'}
                 </p>
-                <span style={estadoBadge(p.estado)}>{p.estado}</span>
+                <span style={badgeStyle(p.estado)}>{p.estado}</span>
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                {p.monto_total && (
-                  <p style={{ margin: '0 0 8px', fontWeight: 800, color: TEXT, fontSize: '1.05rem' }}>
-                    {pesos(p.monto_total)}
-                  </p>
-                )}
-              </div>
+              {p.monto_total && (
+                <p style={{ margin: 0, fontWeight: 900, color: NAVY, fontSize: '1.1rem', flexShrink: 0 }}>
+                  {pesos(p.monto_total)}
+                </p>
+              )}
             </div>
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, marginTop: 14, flexWrap: 'wrap' }}>
               {p.compra?.codigo && (
                 <>
-                  <Link
-                    href={`/dashboard/compra/${encodeURIComponent(p.compra.codigo)}`}
-                    style={{ height: 36, borderRadius: 8, background: BLUE, color: WHITE,
-                      fontSize: '0.8rem', fontWeight: 600, padding: '0 14px', display: 'inline-flex',
-                      alignItems: 'center', textDecoration: 'none' }}
-                  >
+                  <Link href={`/dashboard/compra/${encodeURIComponent(p.compra.codigo)}`}
+                    style={{ height: 38, borderRadius: 10, background: BLUE, color: WHITE,
+                      fontSize: '0.82rem', fontWeight: 700, padding: '0 14px',
+                      display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>
                     Ver / editar
                   </Link>
-                  <a
-                    href={portalUrl(p.compra.codigo)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ height: 36, borderRadius: 8, background: WHITE, color: BLUE,
-                      fontSize: '0.8rem', fontWeight: 600, padding: '0 14px', display: 'inline-flex',
-                      alignItems: 'center', textDecoration: 'none', border: `1.5px solid ${BLUE}` }}
-                  >
+                  <a href={portalUrl(p.compra.codigo)} target="_blank" rel="noopener noreferrer"
+                    style={{ height: 38, borderRadius: 10, background: WHITE, color: BLUE,
+                      fontSize: '0.82rem', fontWeight: 700, padding: '0 14px',
+                      display: 'inline-flex', alignItems: 'center', textDecoration: 'none',
+                      border: `2px solid ${BLUE}` }}>
                     Portal ↗
                   </a>
                 </>
               )}
               {p.estado !== 'postulada' && (
-                <button
-                  onClick={() => cambiarEstado(p.id, 'postulada')}
-                  style={{ height: 36, borderRadius: 8, background: '#D1FAE5', color: '#065F46',
-                    fontSize: '0.8rem', fontWeight: 700, padding: '0 14px', border: 'none',
-                    cursor: 'pointer', fontFamily: 'inherit' }}
-                >
+                <button onClick={() => cambiarEstado(p.id, 'postulada')}
+                  style={{ height: 38, borderRadius: 10, background: GREENBG, color: GREEN,
+                    fontSize: '0.82rem', fontWeight: 700, padding: '0 14px',
+                    border: 'none', cursor: 'pointer' }}>
                   ✓ Postulada
                 </button>
               )}
-              <button
-                onClick={() => eliminar(p.id)}
-                style={{ height: 36, borderRadius: 8, background: 'none', border: 'none',
-                  color: '#9CA3AF', fontSize: '0.8rem', cursor: 'pointer', padding: '0 10px' }}
-              >
+              <button onClick={() => eliminar(p.id)}
+                style={{ height: 38, borderRadius: 10, background: 'none', border: 'none',
+                  color: MUTED, fontSize: '0.85rem', cursor: 'pointer', padding: '0 10px' }}>
                 ✕
               </button>
             </div>
@@ -791,9 +740,7 @@ function PropuestasTab({ userId, onCount }: { userId: string; onCount: (n: numbe
 // ─── Tab 3: Perfil ────────────────────────────────────────────────────────────
 
 function PerfilTab({ userId, usuario, onUsuarioChange }: {
-  userId: string;
-  usuario: Usuario | null;
-  onUsuarioChange: (u: Usuario) => void;
+  userId: string; usuario: Usuario | null; onUsuarioChange: (u: Usuario) => void;
 }) {
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState({ empresa_nombre: '', rut: '', email: '', rubros: '', region: '' });
@@ -801,76 +748,70 @@ function PerfilTab({ userId, usuario, onUsuarioChange }: {
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
-    if (usuario) {
-      setForm({
-        empresa_nombre: usuario.empresa_nombre ?? '',
-        rut: usuario.rut ?? '',
-        email: usuario.email ?? '',
-        rubros: (usuario.rubros_json ?? []).join(', '),
-        region: usuario.region ?? '',
-      });
-    }
+    if (usuario) setForm({
+      empresa_nombre: usuario.empresa_nombre ?? '',
+      rut: usuario.rut ?? '',
+      email: usuario.email ?? '',
+      rubros: (usuario.rubros_json ?? []).join(', '),
+      region: usuario.region ?? '',
+    });
   }, [usuario]);
 
   const guardar = async () => {
     setSaving(true); setMsg('');
     const rubros_json = form.rubros.split(',').map(r => r.trim()).filter(Boolean);
-    const res = await fetch(`/api/usuarios/${userId}`, {
-      method: 'PUT',
+    const res = await fetch(`/api/usuarios/${userId}`, { method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, rubros_json }),
-    });
+      body: JSON.stringify({ ...form, rubros_json }) });
     const json = await res.json();
     setSaving(false);
     if (json.error) { setMsg(json.error); return; }
     onUsuarioChange({ ...usuario!, ...form, rubros_json });
-    setEditando(false);
-    setMsg('Guardado correctamente');
+    setEditando(false); setMsg('Guardado correctamente');
   };
 
   if (!usuario) return <p style={{ color: MUTED, textAlign: 'center', padding: 40 }}>Cargando…</p>;
 
   return (
     <div style={{ padding: '16px' }}>
-      <div style={{
-        background: WHITE, borderRadius: 14, border: `1px solid ${BORDER}`, padding: '16px',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: TEXT }}>
+      <div style={{ background: WHITE, borderRadius: 16, border: `1.5px solid ${BORDER}`,
+        padding: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: NAVY }}>
             {usuario.empresa_nombre}
           </h3>
-          <button
-            onClick={() => setEditando(v => !v)}
-            style={{ height: 36, borderRadius: 8, background: editando ? BG : BLUE_DARK,
-              color: editando ? MUTED : WHITE, border: editando ? `1px solid ${BORDER}` : 'none',
-              fontSize: '0.8rem', fontWeight: 600, padding: '0 14px', cursor: 'pointer',
-              fontFamily: 'inherit' }}
-          >
+          <button onClick={() => setEditando(v => !v)} style={{
+            height: 36, borderRadius: 8,
+            background: editando ? BG : NAVY,
+            color: editando ? MUTED : WHITE,
+            border: editando ? `1.5px solid ${BORDER}` : 'none',
+            fontSize: '0.82rem', fontWeight: 700, padding: '0 14px', cursor: 'pointer',
+          }}>
             {editando ? 'Cancelar' : 'Editar'}
           </button>
         </div>
 
         {!editando ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <Row label="RUT" valor={usuario.rut} />
-            <Row label="Email" valor={usuario.email ?? '—'} />
-            <Row label="Región" valor={usuario.region ?? '—'} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <PRow label="RUT"    valor={usuario.rut} />
+            <PRow label="Email"  valor={usuario.email ?? '—'} />
+            <PRow label="Región" valor={usuario.region ?? '—'} />
             <div>
-              <p style={{ margin: '0 0 8px', fontSize: '0.8rem', color: MUTED }}>Rubros</p>
+              <p style={{ margin: '0 0 8px', fontSize: '0.78rem', fontWeight: 700, color: BLUE,
+                textTransform: 'uppercase', letterSpacing: '0.06em' }}>Rubros</p>
               {usuario.rubros_json?.length ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {usuario.rubros_json.map(r => (
-                    <span key={r} style={{
-                      background: BLUE + '15', color: BLUE, fontSize: '0.8rem',
-                      fontWeight: 600, padding: '4px 12px', borderRadius: 99,
-                    }}>
+                    <span key={r} style={{ background: BLUEBG, color: BLUE,
+                      fontSize: '0.82rem', fontWeight: 700, padding: '5px 14px',
+                      borderRadius: 99, border: `1.5px solid ${BLUE}30` }}>
                       {r}
                     </span>
                   ))}
                 </div>
               ) : (
-                <p style={{ margin: 0, fontSize: '0.85rem', color: RED }}>
-                  ⚠ Sin rubros — agrégalos para calcular relevancia de licitaciones.
+                <p style={{ margin: 0, fontSize: '0.85rem', color: RED, fontWeight: 600 }}>
+                  ⚠ Sin rubros — agrégalos para calcular relevancia
                 </p>
               )}
             </div>
@@ -879,31 +820,36 @@ function PerfilTab({ userId, usuario, onUsuarioChange }: {
           <>
             {[
               { key: 'empresa_nombre', label: 'Nombre empresa' },
-              { key: 'rut', label: 'RUT' },
-              { key: 'email', label: 'Email' },
-              { key: 'region', label: 'Región' },
+              { key: 'rut',            label: 'RUT' },
+              { key: 'email',          label: 'Email' },
+              { key: 'region',         label: 'Región' },
             ].map(({ key, label }) => (
-              <div key={key} style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: '0.8rem', color: MUTED, display: 'block', marginBottom: 4 }}>
+              <div key={key} style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: 700, color: BLUE,
+                  textTransform: 'uppercase', letterSpacing: '0.05em',
+                  display: 'block', marginBottom: 5 }}>
                   {label}
                 </label>
                 <input style={inputStyle} value={form[key as keyof typeof form]}
                   onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
               </div>
             ))}
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: '0.8rem', color: MUTED, display: 'block', marginBottom: 4 }}>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 700, color: BLUE,
+                textTransform: 'uppercase', letterSpacing: '0.05em',
+                display: 'block', marginBottom: 5 }}>
                 Rubros (separados por coma)
               </label>
-              <input style={inputStyle} placeholder="impresión, vestuario, grabados"
+              <input style={inputStyle} placeholder="impresión, vestuario, pendones"
                 value={form.rubros}
                 onChange={e => setForm(f => ({ ...f, rubros: e.target.value }))} />
-              <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: MUTED }}>
-                Los rubros determinan qué licitaciones se consideran relevantes.
+              <p style={{ margin: '5px 0 0', fontSize: '0.75rem', color: MUTED }}>
+                Determinan qué licitaciones son relevantes para ti
               </p>
             </div>
             {msg && (
-              <p style={{ fontSize: '0.85rem', color: msg.includes('correctamente') ? GREEN : RED, margin: '0 0 8px' }}>
+              <p style={{ fontSize: '0.85rem', fontWeight: 600,
+                color: msg.includes('correctamente') ? GREEN : RED, margin: '0 0 10px' }}>
                 {msg}
               </p>
             )}
@@ -913,19 +859,21 @@ function PerfilTab({ userId, usuario, onUsuarioChange }: {
           </>
         )}
       </div>
-
       {msg && !editando && (
-        <p style={{ fontSize: '0.85rem', color: GREEN, margin: '12px 0 0', fontWeight: 500 }}>{msg}</p>
+        <p style={{ fontSize: '0.85rem', color: GREEN, margin: '12px 0 0', fontWeight: 600 }}>{msg}</p>
       )}
     </div>
   );
 }
 
-function Row({ label, valor }: { label: string; valor: string }) {
+function PRow({ label, valor }: { label: string; valor: string }) {
   return (
-    <div style={{ display: 'flex', gap: 8 }}>
-      <span style={{ fontSize: '0.8rem', color: MUTED, minWidth: 60 }}>{label}</span>
-      <span style={{ fontSize: '0.85rem', color: TEXT, fontWeight: 500 }}>{valor}</span>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: MUTED,
+        textTransform: 'uppercase', letterSpacing: '0.04em', minWidth: 56 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: '0.92rem', color: TEXT, fontWeight: 600 }}>{valor}</span>
     </div>
   );
 }
@@ -933,10 +881,11 @@ function Row({ label, valor }: { label: string; valor: string }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage({ params }: { params: { user_id: string } }) {
-  const [tab, setTab] = useState(0);
-  const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [countOportunidades, setCountOportunidades] = useState(0);
-  const [countPropuestas, setCountPropuestas] = useState(0);
+  const [tab, setTab]               = useState(0);
+  const [usuario, setUsuario]       = useState<Usuario | null>(null);
+  const [countOp, setCountOp]       = useState(0);
+  const [countProp, setCountProp]   = useState(0);
+  const [noVistas, setNoVistas]     = useState(0);
 
   useEffect(() => {
     fetch(`/api/usuarios/${params.user_id}`)
@@ -945,64 +894,67 @@ export default function DashboardPage({ params }: { params: { user_id: string } 
   }, [params.user_id]);
 
   return (
-    <div style={{
-      minHeight: '100vh', background: BG,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif',
-      color: TEXT, maxWidth: 600, margin: '0 auto',
-    }}>
-      {/* Header */}
-      <header style={{
-        background: `linear-gradient(135deg, ${BLUE_DARK} 0%, ${BLUE} 100%)`,
-        color: WHITE, padding: '14px 16px',
-        display: 'flex', alignItems: 'center', gap: 10,
+    <>
+      <style>{GLOBAL_CSS}</style>
+      <div className="dash-root" style={{
+        minHeight: '100vh', background: BG,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif',
+        color: TEXT, maxWidth: 480, margin: '0 auto',
       }}>
-        <Link href="/app/dashboard"
-          style={{ color: WHITE, textDecoration: 'none', fontSize: '1.1rem', lineHeight: 1, padding: '4px 6px', borderRadius: 6, background: 'rgba(255,255,255,0.15)' }}>
-          ←
-        </Link>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontSize: '1rem', fontWeight: 700,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {usuario?.empresa_nombre ?? '…'}
-          </h1>
-          <p style={{ margin: 0, fontSize: '0.72rem', opacity: 0.7 }}>
-            RUT {usuario?.rut ?? '…'}
-          </p>
+        {/* Header */}
+        <header style={{
+          background: `linear-gradient(135deg, ${NAVY} 0%, ${BLUE} 100%)`,
+          color: WHITE, padding: '18px 16px 16px',
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <Link href="/app/dashboard" style={{
+            color: WHITE, textDecoration: 'none', fontSize: '1.2rem', lineHeight: 1,
+            padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.12)',
+            fontWeight: 300,
+          }}>←</Link>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-0.01em',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {usuario?.empresa_nombre ?? '…'}
+            </h1>
+            <p style={{ margin: 0, fontSize: '0.72rem', opacity: 0.65, marginTop: 1 }}>
+              RUT {usuario?.rut ?? '…'}
+            </p>
+          </div>
+          {/* Unread badge in header */}
+          {noVistas > 0 && (
+            <div style={{ background: RED, borderRadius: 99, minWidth: 26, height: 26,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.75rem', fontWeight: 800, color: WHITE, padding: '0 6px' }}>
+              {noVistas}
+            </div>
+          )}
+        </header>
+
+        {/* Sticky tab bar */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 10,
+          boxShadow: '0 2px 8px rgba(0,26,77,0.08)' }}>
+          <TabBar
+            active={tab} onChange={setTab}
+            counts={[countOp, countProp]}
+            noVistas={noVistas}
+          />
         </div>
-      </header>
 
-      {/* Tabs */}
-      <div style={{ background: WHITE, position: 'sticky', top: 0, zIndex: 9, boxShadow: '0 1px 0 rgba(0,0,0,0.06)' }}>
-        <TabBar
-          active={tab}
-          onChange={setTab}
-          counts={[countOportunidades, countPropuestas]}
-        />
+        {/* Content */}
+        <div style={{ minHeight: 'calc(100vh - 122px)', paddingBottom: 24 }}>
+          {tab === 0 && (
+            <OportunidadesTab userId={params.user_id} usuario={usuario}
+              onCount={setCountOp} onNoVistas={setNoVistas} />
+          )}
+          {tab === 1 && (
+            <PropuestasTab userId={params.user_id} onCount={setCountProp} />
+          )}
+          {tab === 2 && (
+            <PerfilTab userId={params.user_id} usuario={usuario} onUsuarioChange={setUsuario} />
+          )}
+        </div>
       </div>
-
-      {/* Content */}
-      <div style={{ minHeight: 'calc(100vh - 108px)' }}>
-        {tab === 0 && (
-          <OportunidadesTab
-            userId={params.user_id}
-            usuario={usuario}
-            onCount={setCountOportunidades}
-          />
-        )}
-        {tab === 1 && (
-          <PropuestasTab
-            userId={params.user_id}
-            onCount={setCountPropuestas}
-          />
-        )}
-        {tab === 2 && (
-          <PerfilTab
-            userId={params.user_id}
-            usuario={usuario}
-            onUsuarioChange={setUsuario}
-          />
-        )}
-      </div>
-    </div>
+    </>
   );
 }
