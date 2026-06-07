@@ -22,7 +22,7 @@ export default function EmpresaCarteraPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/usuarios')
+    fetch('/api/usuarios', { headers: { Authorization: `Bearer ${localStorage.getItem('asesor_token') ?? ''}` } })
       .then(r => r.json())
       .then(d => { setTodos(Array.isArray(d) ? d : []); setLoading(false); });
   }, []);
