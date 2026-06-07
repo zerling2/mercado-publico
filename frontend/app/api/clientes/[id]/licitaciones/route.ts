@@ -19,12 +19,25 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (!relevancia?.length) return NextResponse.json([]);
 
   const ids = relevancia.map(r => r.compra_agil_id);
-  const { data: compras, error: e2 } = await sb()
+
+  // Try with organismo_nombre first; fall back if column doesn't exist yet
+  let compras: Array<Record<string, unknown>> | null = null;
+  const { data: c1, error: e2 } = await sb()
     .from('compras_agiles')
     .select('id, codigo, nombre, estado, monto, region, fecha_cierre, organismo_nombre')
     .in('id', ids);
 
-  if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });
+  if (e2) {
+    // Column might not exist — retry without it
+    const { data: c2, error: e3 } = await sb()
+      .from('compras_agiles')
+      .select('id, codigo, nombre, estado, monto, region, fecha_cierre')
+      .in('id', ids);
+    if (e3) return NextResponse.json({ error: e3.message }, { status: 500 });
+    compras = (c2 ?? []).map(c => ({ ...c, organismo_nombre: null }));
+  } else {
+    compras = c1 ?? [];
+  }
 
   const compraMap = new Map((compras ?? []).map(c => [c.id, c]));
 

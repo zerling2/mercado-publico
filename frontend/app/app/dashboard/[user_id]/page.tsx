@@ -388,6 +388,7 @@ function OportunidadesTab({ userId, usuario, onCount, onNoVistas }: {
     setLoading(true);
     fetch(`/api/clientes/${userId}/licitaciones?limite=100`)
       .then(r => r.json()).then(d => {
+        if (d?.error) { setMsg(`Error al cargar: ${d.error}`); setLoading(false); return; }
         const l = Array.isArray(d) ? d : [];
         setLista(l);
         onCount(l.length);
