@@ -220,7 +220,7 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
 
   const buffer = await renderToBuffer(doc);
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="cotizacion-${compra_codigo}.pdf"`,
