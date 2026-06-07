@@ -104,9 +104,10 @@ function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
 
 export default function ClienteBandejaPage() {
   const router = useRouter();
-  const [data, setData]     = useState<BandejaData | null>(null);
+  const [data, setData]       = useState<BandejaData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState('');
+  const [error, setError]     = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem('cliente_token');
@@ -134,7 +135,7 @@ export default function ClienteBandejaPage() {
     const onVisible = () => { if (document.visibilityState === 'visible') load(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [router]);
+  }, [router, refreshKey]);
 
   const logout = () => {
     localStorage.removeItem('cliente_token');
@@ -170,7 +171,7 @@ export default function ClienteBandejaPage() {
       <header style={{ background: `linear-gradient(135deg,${BLUE_D} 0%,${BLUE} 100%)`,
         color: WHITE, padding: '14px 16px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
+        <div style={{ flex: 1 }}>
           <p style={{ margin: 0, fontWeight: 800, fontSize: '1rem' }}>Mis cotizaciones</p>
           {data?.empresa && (
             <p style={{ margin: '2px 0 0', fontSize: '0.72rem', opacity: 0.65 }}>
@@ -178,6 +179,14 @@ export default function ClienteBandejaPage() {
             </p>
           )}
         </div>
+        <button
+          onClick={() => setRefreshKey(k => k + 1)}
+          disabled={loading}
+          style={{ background: 'rgba(255,255,255,0.12)', border: 'none', color: WHITE,
+            borderRadius: 7, padding: '6px 10px', fontSize: '0.78rem',
+            cursor: 'pointer', fontFamily: 'inherit', opacity: loading ? 0.5 : 1, marginRight: 6 }}>
+          {loading ? '…' : '↻'}
+        </button>
         <button onClick={logout} style={{ background: 'rgba(255,255,255,0.15)',
           border: 'none', color: WHITE, borderRadius: 7, padding: '6px 12px',
           fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit' }}>

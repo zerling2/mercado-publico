@@ -23,12 +23,23 @@ interface Data {
   items: Item[];
 }
 interface Row extends Item { costoEdit: string; margenEdit: string; precioEdit: string }
-type DoneState = 'aprobada' | 'rechazada' | 'postulada' | 'ganada' | 'perdida' | 'desierta';
+
+type EstadoFinal = 'aprobada' | 'rechazada' | 'postulada' | 'ganada' | 'perdida' | 'desierta';
+const ESTADOS_FINALES: EstadoFinal[] = ['aprobada', 'rechazada', 'postulada', 'ganada', 'perdida', 'desierta'];
 
 const BLUE = '#003DA5'; const BLUE_D = '#00297A';
 const GREEN = '#059669'; const RED = '#DC2626';
 const TEXT = '#111827'; const MUTED = '#6B7280';
 const BORDER = '#E5E7EB'; const BG = '#F9FAFB'; const WHITE = '#FFFFFF';
+
+const ESTADO_INFO: Record<EstadoFinal, { label: string; color: string; emoji: string; canModify: boolean }> = {
+  aprobada:  { label: 'Postulada',                 color: GREEN, emoji: '✅', canModify: true  },
+  rechazada: { label: 'Rechazada',                 color: RED,   emoji: '❌', canModify: true  },
+  postulada: { label: 'Enviada al organismo',      color: BLUE,  emoji: '📤', canModify: false },
+  ganada:    { label: 'Adjudicada',                color: GREEN, emoji: '🏆', canModify: false },
+  perdida:   { label: 'No adjudicada',             color: RED,   emoji: '📋', canModify: false },
+  desierta:  { label: 'Licitación desierta',       color: MUTED, emoji: '📋', canModify: false },
+};
 
 function pesos(n: number) {
   if (!n) return '—';
@@ -51,14 +62,17 @@ export default function CotizacionClientePage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
 
-  const [data, setData]     = useState<Data | null>(null);
-  const [rows, setRows]     = useState<Row[]>([]);
+  const [data, setData]         = useState<Data | null>(null);
+  const [rows, setRows]         = useState<Row[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
   const [sending, setSending]   = useState(false);
   const [rechazando, setRechazando] = useState(false);
   const [comentarioRechazo, setComentarioRechazo] = useState('');
-  const [done, setDone]         = useState<DoneState | null>(null);
+  // estadoFinal: estado que viene de la BD (terminal), null si editable
+  const [estadoFinal, setEstadoFinal] = useState<EstadoFinal | null>(null);
+  // editando: true cuando el usuario presionó "Modificar" para volver al formulario
+  const [editando, setEditando] = useState(false);
 
   useEffect(() => {
     fetch(`/api/cotizacion-cliente/${token}`)
@@ -66,10 +80,10 @@ export default function CotizacionClientePage() {
       .then(d => {
         if (d.error) { setError(d.error); return; }
         setData(d);
-        const estado = d.cot?.estado as DoneState | string;
-        const terminalStates: DoneState[] = ['aprobada', 'rechazada', 'postulada', 'ganada', 'perdida', 'desierta'];
-        if (terminalStates.includes(estado as DoneState)) setDone(estado as DoneState);
-        // Rows always loaded so the user can re-open and modify if allowed
+        const estado = d.cot?.estado as string;
+        if (ESTADOS_FINALES.includes(estado as EstadoFinal)) {
+          setEstadoFinal(estado as EstadoFinal);
+        }
         setRows((d.items ?? []).map((it: Item) => ({
           ...it,
           costoEdit:  (it.costo_cliente  ?? it.costo)  != null ? String(it.costo_cliente  ?? it.costo)  : '',
@@ -113,7 +127,8 @@ export default function CotizacionClientePage() {
       });
       const json = await res.json();
       if (!res.ok || json.error) { setError(json.error ?? 'Error al aprobar'); return; }
-      setDone('aprobada');
+      setEstadoFinal('aprobada');
+      setEditando(false);
     } finally {
       setSending(false);
     }
@@ -129,11 +144,17 @@ export default function CotizacionClientePage() {
       });
       const json = await res.json();
       if (!res.ok || json.error) { setError(json.error ?? 'Error al rechazar'); return; }
-      setDone('rechazada');
+      setEstadoFinal('rechazada');
+      setEditando(false);
+      setRechazando(false);
     } finally {
       setSending(false);
     }
   };
+
+  // locked = true cuando hay estado final Y el usuario no está editando
+  const locked = estadoFinal !== null && !editando;
+  const cfgFinal = estadoFinal ? ESTADO_INFO[estadoFinal] : null;
 
   const calcRows = rows.map(r => {
     const precioAuto = !!(r.costoEdit && r.margenEdit && !rows[rows.indexOf(r)]?.precioEdit);
@@ -159,43 +180,6 @@ export default function CotizacionClientePage() {
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center',
       justifyContent: 'center', fontFamily: '-apple-system, sans-serif', color: RED }}>{error}</div>
   );
-
-  if (done !== null) {
-    const DONE_CONFIG: Record<DoneState, { emoji: string; titulo: string; subtitulo: string; canModify: boolean }> = {
-      aprobada:  { emoji: '✅', titulo: '¡Precios confirmados!',         subtitulo: 'El asesor preparará la postulación.',           canModify: true  },
-      rechazada: { emoji: '❌', titulo: 'Cotización rechazada',           subtitulo: 'El asesor quedó notificado.',                   canModify: true  },
-      postulada: { emoji: '📤', titulo: 'Propuesta enviada al organismo', subtitulo: 'La postulación ya fue presentada por tu asesor.', canModify: false },
-      ganada:    { emoji: '🏆', titulo: '¡Oferta adjudicada!',           subtitulo: 'Felicitaciones, ganaron la licitación.',         canModify: false },
-      perdida:   { emoji: '📋', titulo: 'No adjudicada',                 subtitulo: 'La licitación fue adjudicada a otro proveedor.', canModify: false },
-      desierta:  { emoji: '📋', titulo: 'Licitación desierta',           subtitulo: 'El organismo declaró la licitación desierta.',   canModify: false },
-    };
-    const cfg = DONE_CONFIG[done];
-    return (
-      <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', gap: 16,
-        fontFamily: '-apple-system, sans-serif', textAlign: 'center', padding: '0 24px' }}>
-        <div style={{ fontSize: '3.5rem' }}>{cfg.emoji}</div>
-        <h2 style={{ color: TEXT, fontWeight: 800, margin: 0 }}>{cfg.titulo}</h2>
-        <p style={{ color: MUTED, margin: 0 }}>{cfg.subtitulo}</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 320, marginTop: 8 }}>
-          <button onClick={() => router.push('/app/cliente/bandeja')}
-            style={{ height: 44, borderRadius: 10, border: 'none',
-              background: BLUE, color: WHITE, fontFamily: 'inherit',
-              fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
-            Ver mis cotizaciones →
-          </button>
-          {cfg.canModify && (
-            <button onClick={() => setDone(null)}
-              style={{ height: 40, borderRadius: 10, border: `1.5px solid ${BORDER}`,
-                background: WHITE, color: MUTED, fontFamily: 'inherit',
-                fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
-              Modificar mi respuesta
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{ minHeight: '100vh', background: BG,
@@ -228,6 +212,35 @@ export default function CotizacionClientePage() {
 
       <div style={{ padding: '12px 14px' }}>
 
+        {/* Banner de estado cuando está bloqueado */}
+        {locked && cfgFinal && (
+          <div style={{ background: WHITE, borderRadius: 12,
+            border: `1.5px solid ${cfgFinal.color}22`,
+            padding: '12px 14px', marginBottom: 12,
+            display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>{cfgFinal.emoji}</span>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem', color: cfgFinal.color }}>
+                {cfgFinal.label}
+              </p>
+              {data?.cot.respondida_at && (
+                <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: MUTED }}>
+                  {estadoFinal === 'rechazada' ? 'Rechazada el' : 'Confirmada el'} {fechaCorta(data.cot.respondida_at)}
+                </p>
+              )}
+            </div>
+            {cfgFinal.canModify && (
+              <button onClick={() => setEditando(true)}
+                style={{ flexShrink: 0, height: 34, borderRadius: 8,
+                  border: `1.5px solid ${BORDER}`, background: WHITE,
+                  color: TEXT, fontFamily: 'inherit', fontSize: '0.78rem',
+                  fontWeight: 600, cursor: 'pointer', padding: '0 12px' }}>
+                Modificar
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Info card */}
         <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
           padding: '11px 14px', marginBottom: 12,
@@ -249,8 +262,8 @@ export default function CotizacionClientePage() {
           </div>
         )}
 
-        {/* Progress bar */}
-        {rows.length > 0 && (
+        {/* Progress bar — solo cuando editable */}
+        {!locked && rows.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between',
               fontSize: '0.72rem', color: MUTED, marginBottom: 4 }}>
@@ -277,7 +290,8 @@ export default function CotizacionClientePage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           {calcRows.map((r, idx) => (
             <div key={r.id} style={{ background: WHITE, borderRadius: 12,
-              border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
+              border: `1px solid ${BORDER}`, overflow: 'hidden',
+              opacity: locked ? 0.85 : 1 }}>
               <div style={{ padding: '11px 14px 8px',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -307,30 +321,32 @@ export default function CotizacionClientePage() {
                   <label style={labelSt}>Costo unit.</label>
                   <input type="number" min={0} placeholder="$"
                     value={rows[idx].costoEdit}
-                    onChange={e => update(idx, 'costoEdit', e.target.value)}
-                    style={inpSt(!!rows[idx].costoEdit)} />
+                    readOnly={locked}
+                    onChange={e => !locked && update(idx, 'costoEdit', e.target.value)}
+                    style={inpSt(!!rows[idx].costoEdit, locked)} />
                 </div>
                 <div>
                   <label style={labelSt}>Margen</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <input type="number" min={0} max={999} placeholder="0"
                       value={rows[idx].margenEdit}
-                      onChange={e => update(idx, 'margenEdit', e.target.value)}
-                      style={{ ...inpSt(!!rows[idx].margenEdit), textAlign: 'center' }} />
+                      readOnly={locked}
+                      onChange={e => !locked && update(idx, 'margenEdit', e.target.value)}
+                      style={{ ...inpSt(!!rows[idx].margenEdit, locked), textAlign: 'center' }} />
                     <span style={{ fontSize: '0.75rem', color: MUTED, flexShrink: 0 }}>%</span>
                   </div>
                 </div>
                 <div>
                   <label style={labelSt}>
-                    Precio neto {r.precioAuto && <span style={{ color: BLUE }}>·auto</span>}
+                    Precio neto {!locked && r.precioAuto && <span style={{ color: BLUE }}>·auto</span>}
                   </label>
                   <input type="number" min={0} placeholder="$"
                     value={r.precioAuto ? String(r.precioFinal) : rows[idx].precioEdit}
-                    readOnly={r.precioAuto}
-                    onChange={e => { if (!r.precioAuto) update(idx, 'precioEdit', e.target.value); }}
-                    style={{ ...inpSt(!!(rows[idx].precioEdit || r.precioAuto)),
-                      color: r.precioAuto ? BLUE : TEXT,
-                      cursor: r.precioAuto ? 'default' : 'text' }} />
+                    readOnly={locked || r.precioAuto}
+                    onChange={e => { if (!locked && !r.precioAuto) update(idx, 'precioEdit', e.target.value); }}
+                    style={{ ...inpSt(!!(rows[idx].precioEdit || r.precioAuto), locked),
+                      color: (!locked && r.precioAuto) ? BLUE : TEXT,
+                      cursor: (locked || r.precioAuto) ? 'default' : 'text' }} />
                 </div>
               </div>
             </div>
@@ -369,8 +385,8 @@ export default function CotizacionClientePage() {
           </div>
         )}
 
-        {/* Rejection comment */}
-        {rechazando && (
+        {/* Rechazo textarea — solo cuando editando */}
+        {!locked && rechazando && (
           <div style={{ background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 12,
             padding: '12px 14px', marginBottom: 14 }}>
             <p style={{ margin: '0 0 8px', fontWeight: 700, color: RED, fontSize: '0.85rem' }}>
@@ -400,28 +416,61 @@ export default function CotizacionClientePage() {
       </div>
 
       {/* Fixed bottom bar */}
-      {!rechazando && (
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20,
-          background: WHITE, borderTop: `1px solid ${BORDER}` }}>
-          <div style={{ maxWidth: 640, margin: '0 auto',
-            padding: '10px 14px', display: 'flex', gap: 8 }}>
-            <button onClick={() => setRechazando(true)}
-              style={{ height: 46, borderRadius: 11, border: `1.5px solid ${BORDER}`,
-                background: BG, color: RED, fontFamily: 'inherit',
-                fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', padding: '0 18px' }}>
-              Rechazar
-            </button>
-            <button onClick={aprobar} disabled={sending || needsInput}
-              style={{ flex: 1, height: 46, borderRadius: 11, border: 'none',
-                cursor: needsInput ? 'default' : 'pointer',
-                background: needsInput ? '#E5E7EB' : GREEN,
-                color: needsInput ? MUTED : WHITE,
-                fontFamily: 'inherit', fontSize: '0.95rem', fontWeight: 700 }}>
-              {sending ? 'Enviando…' : needsInput ? 'Completa los precios' : 'Aprobar cotización ✓'}
-            </button>
-          </div>
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20,
+        background: WHITE, borderTop: `1px solid ${BORDER}` }}>
+        <div style={{ maxWidth: 640, margin: '0 auto', padding: '10px 14px' }}>
+          {locked ? (
+            /* Barra de estado — formulario bloqueado */
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: '1.2rem' }}>{cfgFinal?.emoji}</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: cfgFinal?.color }}>
+                  {cfgFinal?.label}
+                </p>
+                {cfgFinal?.canModify && (
+                  <p style={{ margin: 0, fontSize: '0.7rem', color: MUTED }}>
+                    Puedes modificar tu respuesta
+                  </p>
+                )}
+              </div>
+              {cfgFinal?.canModify && (
+                <button onClick={() => setEditando(true)}
+                  style={{ height: 40, borderRadius: 10, border: `1.5px solid ${BORDER}`,
+                    background: BG, color: TEXT, fontFamily: 'inherit',
+                    fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', padding: '0 14px' }}>
+                  Modificar →
+                </button>
+              )}
+            </div>
+          ) : rechazando ? null : (
+            /* Barra de acción — formulario editable */
+            <div style={{ display: 'flex', gap: 8 }}>
+              {editando && (
+                <button onClick={() => { setEditando(false); setRechazando(false); }}
+                  style={{ height: 46, borderRadius: 11, border: `1.5px solid ${BORDER}`,
+                    background: BG, color: MUTED, fontFamily: 'inherit',
+                    fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', padding: '0 14px' }}>
+                  Cancelar
+                </button>
+              )}
+              <button onClick={() => setRechazando(true)}
+                style={{ height: 46, borderRadius: 11, border: `1.5px solid ${BORDER}`,
+                  background: BG, color: RED, fontFamily: 'inherit',
+                  fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', padding: '0 18px' }}>
+                Rechazar
+              </button>
+              <button onClick={aprobar} disabled={sending || needsInput}
+                style={{ flex: 1, height: 46, borderRadius: 11, border: 'none',
+                  cursor: needsInput ? 'default' : 'pointer',
+                  background: needsInput ? '#E5E7EB' : GREEN,
+                  color: needsInput ? MUTED : WHITE,
+                  fontFamily: 'inherit', fontSize: '0.95rem', fontWeight: 700 }}>
+                {sending ? 'Enviando…' : needsInput ? 'Completa los precios' : 'Confirmar cotización ✓'}
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -431,18 +480,22 @@ const labelSt: React.CSSProperties = {
   fontSize: '0.64rem', fontWeight: 700, color: MUTED,
   textTransform: 'uppercase', letterSpacing: '0.04em',
 };
-const inpSt = (filled: boolean): React.CSSProperties => ({
+const inpSt = (filled: boolean, locked: boolean): React.CSSProperties => ({
   height: 36, width: '100%', boxSizing: 'border-box' as const,
-  borderRadius: 8, border: `1.5px solid ${filled ? BLUE : BORDER}`,
+  borderRadius: 8,
+  border: `1.5px solid ${locked ? BORDER : filled ? '#003DA5' : BORDER}`,
   padding: '0 9px', fontSize: '0.85rem', fontFamily: 'inherit',
-  textAlign: 'right' as const, color: TEXT,
-  background: filled ? '#EFF6FF' : '#FAFAFA', outline: 'none',
+  textAlign: 'right' as const,
+  color: locked ? MUTED : '#111827',
+  background: locked ? '#F3F4F6' : filled ? '#EFF6FF' : '#FAFAFA',
+  outline: 'none',
+  cursor: locked ? 'default' : 'text',
 });
 function InfoRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
     <div style={{ display: 'flex', gap: 6 }}>
       <span style={{ color: MUTED, fontSize: '0.78rem', minWidth: 80, flexShrink: 0 }}>{label}</span>
-      <span style={{ color: TEXT, fontSize: '0.82rem', fontWeight: bold ? 700 : 400 }}>{value}</span>
+      <span style={{ color: '#111827', fontSize: '0.82rem', fontWeight: bold ? 700 : 400 }}>{value}</span>
     </div>
   );
 }
