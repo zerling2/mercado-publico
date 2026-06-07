@@ -17,14 +17,12 @@ export async function GET(
   const ticket = process.env.MERCADO_PUBLICO_TICKET;
   const codigo = params.codigo;
 
-  // Always try to get base data from our DB first
   const { data: dbRow } = await supabase()
     .from('compras_agiles')
     .select('codigo, nombre, estado, monto, region, fecha_publicacion, fecha_cierre')
     .eq('codigo', codigo)
     .maybeSingle();
 
-  // If no ticket, return what we have from DB with a note
   if (!ticket) {
     return NextResponse.json({
       ...fromDB(dbRow),
@@ -33,7 +31,6 @@ export async function GET(
     });
   }
 
-  // Try to get full data from MP API
   try {
     const raw = await buscarEnAPI(ticket, codigo);
     if (raw) {
@@ -41,7 +38,6 @@ export async function GET(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // API failed — return DB data with error note
     return NextResponse.json({
       ...fromDB(dbRow),
       _fuente: 'base_de_datos',
@@ -49,7 +45,6 @@ export async function GET(
     });
   }
 
-  // API returned no results — return DB data
   return NextResponse.json({
     ...fromDB(dbRow),
     _fuente: 'base_de_datos',
@@ -57,50 +52,104 @@ export async function GET(
   });
 }
 
-// Try multiple endpoint patterns against the MP API
 async function buscarEnAPI(ticket: string, codigo: string): Promise<Record<string, unknown> | null> {
   const headers = { ticket };
+  let foundItem: Record<string, unknown> | null = null;
 
   // Pattern 1: detail by codigo as path param
-  const r1 = await fetch(`${API_V2}/v2/compra-agil/${encodeURIComponent(codigo)}`, { headers });
-  if (r1.ok) {
-    const j = await r1.json();
-    const item = j?.payload ?? j;
-    if (item?.codigo || item?.nombre) return item;
-  }
+  try {
+    const r1 = await fetch(`${API_V2}/v2/compra-agil/${encodeURIComponent(codigo)}`, { headers });
+    if (r1.ok) {
+      const j = await r1.json();
+      const item = j?.payload ?? j;
+      if (item?.codigo || item?.nombre) foundItem = { ...item };
+    }
+  } catch { /* fall through */ }
 
   // Pattern 2: list search — codigo_externo param
-  const r2 = await fetch(
-    `${API_V2}/v2/compra-agil?codigo_externo=${encodeURIComponent(codigo)}&tamano_pagina=5`,
-    { headers }
-  );
-  if (r2.ok) {
-    const j = await r2.json();
-    const items: Record<string, unknown>[] = j?.payload?.items ?? [];
-    const match = items.find((i) => i.codigo === codigo);
-    if (match) return match;
-    if (items.length === 1) return items[0];
+  if (!foundItem) {
+    try {
+      const r2 = await fetch(
+        `${API_V2}/v2/compra-agil?codigo_externo=${encodeURIComponent(codigo)}&tamano_pagina=5`,
+        { headers }
+      );
+      if (r2.ok) {
+        const j = await r2.json();
+        const items: Record<string, unknown>[] = j?.payload?.items ?? [];
+        const match = items.find((i) => i.codigo === codigo);
+        if (match) foundItem = { ...match };
+        else if (items.length === 1) foundItem = { ...items[0] };
+      }
+    } catch { /* fall through */ }
   }
 
-  // Pattern 3: list search — nombre contains codigo (sometimes the code is embedded)
-  const r3 = await fetch(
-    `${API_V2}/v2/compra-agil?nombre=${encodeURIComponent(codigo)}&tamano_pagina=5`,
-    { headers }
-  );
-  if (r3.ok) {
-    const j = await r3.json();
-    const items: Record<string, unknown>[] = j?.payload?.items ?? [];
-    const match = items.find((i) => i.codigo === codigo);
-    if (match) return match;
+  // Pattern 3: nombre search
+  if (!foundItem) {
+    try {
+      const r3 = await fetch(
+        `${API_V2}/v2/compra-agil?nombre=${encodeURIComponent(codigo)}&tamano_pagina=5`,
+        { headers }
+      );
+      if (r3.ok) {
+        const j = await r3.json();
+        const items: Record<string, unknown>[] = j?.payload?.items ?? [];
+        const match = items.find((i) => i.codigo === codigo);
+        if (match) foundItem = { ...match };
+      }
+    } catch { /* fall through */ }
   }
 
-  // All patterns failed — throw last status
-  throw new Error(`API no encontró la compra (intenté 3 endpoints). Último estado: ${r2.status}`);
+  if (!foundItem) {
+    throw new Error(`API no encontró la compra (intenté 3 endpoints).`);
+  }
+
+  // Augment with documents from dedicated sub-endpoints
+  const [docsResult, archivosResult] = await Promise.allSettled([
+    fetch(`${API_V2}/v2/compra-agil/${encodeURIComponent(codigo)}/documentos`, { headers })
+      .then(r => r.ok ? r.json() : null),
+    fetch(`${API_V2}/v2/compra-agil/${encodeURIComponent(codigo)}/archivos`, { headers })
+      .then(r => r.ok ? r.json() : null),
+  ]);
+
+  const docsRaw = docsResult.status === 'fulfilled' ? docsResult.value : null;
+  const archivosRaw = archivosResult.status === 'fulfilled' ? archivosResult.value : null;
+
+  const docsList = extractArrayFromResponse(docsRaw);
+  const archivosList = extractArrayFromResponse(archivosRaw);
+
+  if (docsList?.length) foundItem._sub_documentos = docsList;
+  if (archivosList?.length) foundItem._sub_archivos = archivosList;
+
+  return foundItem;
 }
 
-// Build a response from what we have in our Supabase table
+// Unwrap various response shapes to get the actual array
+function extractArrayFromResponse(data: unknown): unknown[] | null {
+  if (!data) return null;
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+    const d = data as Record<string, unknown>;
+    if (Array.isArray(d.payload)) return d.payload;
+    if (d.payload && typeof d.payload === 'object') {
+      const p = d.payload as Record<string, unknown>;
+      for (const val of Object.values(p)) {
+        if (Array.isArray(val) && val.length > 0) return val;
+      }
+    }
+    // Check known wrapper keys
+    for (const key of ['documentos', 'archivos', 'items', 'data', 'result', 'results']) {
+      if (Array.isArray(d[key])) return d[key] as unknown[];
+    }
+    // Any array value
+    for (const val of Object.values(d)) {
+      if (Array.isArray(val) && val.length > 0) return val;
+    }
+  }
+  return null;
+}
+
 function fromDB(row: Record<string, unknown> | null | undefined) {
-  if (!row) return { codigo: '—', nombre: '—', descripcion: null, estado: '—', organismo: { nombre: null, rut: null, region: null, comuna: null }, monto: null, moneda: 'CLP', fechas: { publicacion: '—', cierre: '—', fin_preguntas: '—' }, items: [], condiciones: { plazo_entrega: null, forma_pago: null, garantia: null, lugar_entrega: null }, contacto: null };
+  if (!row) return { codigo: '—', nombre: '—', descripcion: null, estado: '—', organismo: { nombre: null, rut: null, region: null, comuna: null }, monto: null, moneda: 'CLP', fechas: { publicacion: '—', cierre: '—', fin_preguntas: '—' }, items: [], condiciones: { plazo_entrega: null, forma_pago: null, garantia: null, lugar_entrega: null }, contacto: null, documentos: [] };
   return {
     codigo: row.codigo ?? '—',
     nombre: row.nombre ?? '—',
@@ -117,6 +166,7 @@ function fromDB(row: Record<string, unknown> | null | undefined) {
     items: [],
     condiciones: { plazo_entrega: null, forma_pago: null, garantia: null, lugar_entrega: null },
     contacto: null,
+    documentos: [],
   };
 }
 
@@ -136,11 +186,12 @@ interface RawItem {
   items?: Array<{ descripcion?: string; cantidad?: number; unidad?: string; especificaciones?: string }>;
   condiciones?: { plazo_entrega?: string | number; forma_pago?: string; garantia?: string; lugar_entrega?: string };
   contacto?: { nombre?: string; email?: string; fono?: string };
-  // Document fields — API may use any of these names
   documentos?: RawDoc[];
   archivos?: RawDoc[];
   bases_tecnicas?: RawDoc[];
   adjuntos?: RawDoc[];
+  _sub_documentos?: unknown[];
+  _sub_archivos?: unknown[];
   [key: string]: unknown;
 }
 
@@ -157,23 +208,26 @@ interface RawDoc {
 }
 
 function extractDocs(raw: RawItem): Array<{ nombre: string; url: string; tipo: string }> {
-  // Collect from all possible document fields
   const candidates: RawDoc[] = [
     ...(raw.documentos ?? []),
     ...(raw.archivos ?? []),
     ...(raw.bases_tecnicas ?? []),
     ...(raw.adjuntos ?? []),
+    ...((raw._sub_documentos as RawDoc[] | undefined) ?? []),
+    ...((raw._sub_archivos as RawDoc[] | undefined) ?? []),
   ];
 
-  // Also scan top-level keys for arrays that look like doc lists
+  // Scan all top-level keys for arrays that look like doc lists
+  const knownKeys = new Set(['documentos','archivos','bases_tecnicas','adjuntos','items','_sub_documentos','_sub_archivos']);
   for (const [key, val] of Object.entries(raw)) {
-    if (
-      !['documentos','archivos','bases_tecnicas','adjuntos','items'].includes(key) &&
-      Array.isArray(val) && val.length > 0 &&
-      typeof val[0] === 'object' && val[0] !== null &&
-      ('url' in val[0] || 'url_descarga' in val[0] || 'link' in val[0])
-    ) {
-      candidates.push(...(val as RawDoc[]));
+    if (!knownKeys.has(key) && Array.isArray(val) && val.length > 0) {
+      const first = val[0];
+      if (typeof first === 'object' && first !== null) {
+        const f = first as Record<string, unknown>;
+        if ('url' in f || 'url_descarga' in f || 'link' in f || 'nombre_archivo' in f) {
+          candidates.push(...(val as RawDoc[]));
+        }
+      }
     }
   }
 
