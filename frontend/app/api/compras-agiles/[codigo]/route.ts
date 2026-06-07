@@ -16,10 +16,11 @@ export async function GET(
 ) {
   const ticket = process.env.MERCADO_PUBLICO_TICKET;
   const codigo = params.codigo;
+  const sb = supabase();
 
-  const { data: dbRow } = await supabase()
+  const { data: dbRow } = await sb
     .from('compras_agiles')
-    .select('codigo, nombre, estado, monto, region, fecha_publicacion, fecha_cierre')
+    .select('id, codigo, nombre, estado, monto, region, fecha_publicacion, fecha_cierre, organismo_nombre, descripcion, lugar_entrega, plazo_entrega_dias')
     .eq('codigo', codigo)
     .maybeSingle();
 
@@ -34,6 +35,8 @@ export async function GET(
   try {
     const raw = await buscarEnAPI(ticket, codigo);
     if (raw) {
+      // Enrich market DB in background (don't await — don't block response)
+      if (dbRow?.id) enrichirDB(sb, raw, dbRow.id).catch(() => {});
       return NextResponse.json({ ...normalizar(raw), _fuente: 'api_mp' });
     }
   } catch (err) {
@@ -52,32 +55,100 @@ export async function GET(
   });
 }
 
-async function buscarEnAPI(ticket: string, codigo: string): Promise<Record<string, unknown> | null> {
-  const headers = { ticket };
+// ── MP API ──────────────────────────────────────────────────────────────────
 
-  // Primary: direct detail endpoint (returns full payload including documentos)
-  const r = await fetch(`${API_V2}/v2/compra-agil/${encodeURIComponent(codigo)}`, { headers });
-  if (r.ok) {
-    const j = await r.json();
-    if (j?.success === 'NOK') {
-      const errMsg = (j?.errors?.[0]?.mensaje as string) ?? 'API devolvió error';
-      throw new Error(errMsg);
-    }
-    const item = j?.payload ?? j;
-    if (item?.codigo || item?.nombre) return item as Record<string, unknown>;
+async function buscarEnAPI(ticket: string, codigo: string): Promise<RawItem | null> {
+  const r = await fetch(`${API_V2}/v2/compra-agil/${encodeURIComponent(codigo)}`, {
+    headers: { ticket },
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  if (j?.success === 'NOK') {
+    throw new Error((j?.errors?.[0]?.mensaje as string) ?? 'API devolvió error');
   }
-
-  throw new Error(`API no encontró la compra (estado HTTP: ${r.status})`);
+  const item = j?.payload ?? j;
+  if (item?.codigo || item?.nombre) return item as RawItem;
+  throw new Error('La API no devolvió datos para este código');
 }
 
+// ── Market DB enrichment (runs after response is returned) ──────────────────
+
+async function enrichirDB(sb: ReturnType<typeof supabase>, raw: RawItem, compraId: string) {
+  const inst = raw.institucion;
+  const ent = raw.entrega;
+  const pres = raw.presupuesto ?? raw.montos;
+  const prods = raw.productos_solicitados ?? raw.items ?? [];
+
+  // 1. Update compras_agiles with enriched fields from API
+  await sb.from('compras_agiles').update({
+    organismo_rut: inst?.rut ?? null,
+    organismo_nombre: inst?.organismo_comprador ?? inst?.nombre ?? null,
+    descripcion: raw.descripcion ?? null,
+    lugar_entrega: ent?.direccion_entrega ?? null,
+    plazo_entrega_dias: ent?.plazo_entrega_dias ?? null,
+    productos_extraidos: true,
+  }).eq('id', compraId);
+
+  // 2. Upsert organismo profile
+  if (inst?.rut) {
+    const montoNum = pres?.monto_disponible_clp ?? pres?.monto_disponible ?? 0;
+    await sb.from('organismos').upsert({
+      rut: inst.rut,
+      nombre: inst.organismo_comprador ?? inst.nombre ?? inst.rut,
+      unidad_compra: inst.unidad_compra ?? null,
+      region_num: typeof inst.region === 'number' ? inst.region : null,
+      nombre_region: inst.nombre_region ?? null,
+      ultima_compra_at: raw.fechas?.fecha_publicacion?.split(' ')[0] ?? null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'rut', ignoreDuplicates: false });
+
+    // Increment counters via RPC (if available) or raw SQL
+    await sb.rpc('incrementar_organismo', {
+      p_rut: inst.rut,
+      p_monto: montoNum,
+    }).maybeSingle().catch(() => {
+      // RPC not available yet — skip counter increment
+    });
+  }
+
+  // 3. Save productos_solicitados → compra_productos
+  if (prods.length > 0) {
+    await sb.from('compra_productos').delete().eq('compra_agil_id', compraId);
+    await sb.from('compra_productos').insert(
+      prods.map(p => ({
+        compra_agil_id: compraId,
+        codigo_mp: p.codigo_producto ?? null,
+        nombre: p.nombre ?? p.descripcion ?? '—',
+        descripcion: (p.nombre && p.descripcion && p.nombre !== p.descripcion) ? p.descripcion : null,
+        cantidad: p.cantidad ?? null,
+        unidad_medida: p.unidad_medida ?? p.unidad ?? null,
+      }))
+    );
+  }
+}
+
+// ── DB fallback ──────────────────────────────────────────────────────────────
+
 function fromDB(row: Record<string, unknown> | null | undefined) {
-  if (!row) return { codigo: '—', nombre: '—', descripcion: null, estado: '—', organismo: { nombre: null, rut: null, region: null, comuna: null }, monto: null, moneda: 'CLP', fechas: { publicacion: '—', cierre: '—', fin_preguntas: '—' }, items: [], condiciones: { plazo_entrega: null, forma_pago: null, garantia: null, lugar_entrega: null }, contacto: null, documentos: [] };
+  if (!row) return {
+    codigo: '—', nombre: '—', descripcion: null, estado: '—',
+    organismo: { nombre: null, rut: null, region: null, comuna: null },
+    monto: null, moneda: 'CLP',
+    fechas: { publicacion: '—', cierre: '—', fin_preguntas: '—' },
+    items: [], condiciones: { plazo_entrega: null, forma_pago: null, garantia: null, lugar_entrega: null },
+    contacto: null, documentos: [],
+  };
   return {
     codigo: row.codigo ?? '—',
     nombre: row.nombre ?? '—',
-    descripcion: null,
+    descripcion: row.descripcion as string ?? null,
     estado: row.estado ?? '—',
-    organismo: { nombre: null, rut: null, region: String(row.region ?? '—'), comuna: null },
+    organismo: {
+      nombre: row.organismo_nombre as string ?? null,
+      rut: null,
+      region: String(row.region ?? '—'),
+      comuna: null,
+    },
     monto: row.monto ?? null,
     moneda: 'CLP',
     fechas: {
@@ -86,7 +157,12 @@ function fromDB(row: Record<string, unknown> | null | undefined) {
       fin_preguntas: '—',
     },
     items: [],
-    condiciones: { plazo_entrega: null, forma_pago: null, garantia: null, lugar_entrega: null },
+    condiciones: {
+      plazo_entrega: row.plazo_entrega_dias ? `${row.plazo_entrega_dias} días` : null,
+      forma_pago: null,
+      garantia: null,
+      lugar_entrega: row.lugar_entrega as string ?? null,
+    },
     contacto: null,
     documentos: [],
   };
@@ -97,7 +173,7 @@ function fmtFecha(s?: string | null): string {
   return new Date(s).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-// ── Interfaces for the actual MP API v2 response shape ──────────────────────
+// ── Interfaces (MP API v2 actual field names) ────────────────────────────────
 
 interface RawDoc {
   id?: number | string;
@@ -143,17 +219,11 @@ interface RawEntrega {
   plazo_entrega_dias?: number;
 }
 
-interface RawEstado {
-  glosa?: string;
-  nombre?: string;
-  codigo?: string;
-}
-
 interface RawItem {
   codigo?: string;
   nombre?: string;
   descripcion?: string;
-  estado?: RawEstado | string;
+  estado?: { glosa?: string; nombre?: string; codigo?: string } | string;
   institucion?: RawInstitucion;
   presupuesto?: RawPresupuesto;
   montos?: RawPresupuesto;
@@ -170,7 +240,7 @@ interface RawItem {
   [key: string]: unknown;
 }
 
-// ── Document extraction ─────────────────────────────────────────────────────
+// ── Document extraction ──────────────────────────────────────────────────────
 
 function extractDocs(raw: RawItem, codigo?: string): Array<{ nombre: string; url: string; tipo: string }> {
   const candidates: RawDoc[] = [
@@ -180,7 +250,6 @@ function extractDocs(raw: RawItem, codigo?: string): Array<{ nombre: string; url
     ...(raw.adjuntos ?? []),
   ];
 
-  // Scan unknown top-level array keys that look like document lists
   const knownKeys = new Set(['documentos', 'archivos', 'bases_tecnicas', 'adjuntos', 'items', 'productos_solicitados']);
   for (const [key, val] of Object.entries(raw)) {
     if (!knownKeys.has(key) && Array.isArray(val) && val.length > 0) {
@@ -196,7 +265,6 @@ function extractDocs(raw: RawItem, codigo?: string): Array<{ nombre: string; url
     .map(d => {
       const nombre = d.nombre ?? d.nombre_archivo ?? d.descripcion ?? 'Documento';
       let url = d.url ?? d.url_descarga ?? d.link ?? '';
-      // API v2 returns docs with {id, nombre} only — route through our proxy
       if (!url && d.id !== undefined && codigo) {
         url = `/api/mp-doc/${encodeURIComponent(codigo)}/${d.id}`;
       }
@@ -206,7 +274,7 @@ function extractDocs(raw: RawItem, codigo?: string): Array<{ nombre: string; url
     .filter(d => d.url);
 }
 
-// ── Normalise API response to our canonical shape ───────────────────────────
+// ── Normalise API response ───────────────────────────────────────────────────
 
 function normalizar(raw: RawItem) {
   const estado = typeof raw.estado === 'object'
@@ -240,7 +308,6 @@ function normalizar(raw: RawItem) {
       descripcion: it.nombre ?? it.descripcion ?? '—',
       cantidad: it.cantidad ?? null,
       unidad: it.unidad_medida ?? it.unidad ?? null,
-      // Show full description as specs when it differs from the short name
       especificaciones: (it.nombre && it.descripcion && it.nombre !== it.descripcion)
         ? it.descripcion
         : (it.especificaciones ?? null),
