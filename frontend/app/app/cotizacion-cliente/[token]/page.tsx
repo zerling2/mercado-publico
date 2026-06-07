@@ -9,9 +9,14 @@ interface Item {
   descripcion: string | null;
   cantidad: number;
   unidad_medida: string;
+  // asesor values
   costo: number | null;
   margen: number | null;
   precio: number | null;
+  // client values
+  costo_cliente: number | null;
+  margen_cliente: number | null;
+  precio_cliente: number | null;
   requiere_cliente: boolean;
 }
 interface Data {
@@ -38,12 +43,14 @@ function fechaCorta(s: string | null) {
 export default function CotizacionClientePage() {
   const { token } = useParams<{ token: string }>();
 
-  const [data, setData] = useState<Data | null>(null);
-  const [rows, setRows] = useState<Array<Item & { costoEdit: string; margenEdit: string; precioEdit: string }>>([]);
+  const [data,    setData]    = useState<Data | null>(null);
+  const [rows,    setRows]    = useState<Array<Item & { costoEdit: string; margenEdit: string; precioEdit: string }>>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
+  const [error,   setError]   = useState('');
   const [sending, setSending] = useState(false);
-  const [done, setDone]       = useState(false);
+  const [done,    setDone]    = useState(false);
+  const [rechazando, setRechazando] = useState(false);
+  const [comentario, setComentario] = useState('');
 
   useEffect(() => {
     fetch(`/api/cotizacion-cliente/${token}`)
@@ -53,9 +60,16 @@ export default function CotizacionClientePage() {
         setData(d);
         setRows((d.items ?? []).map((it: Item) => ({
           ...it,
-          costoEdit:  it.costo  != null ? String(it.costo)  : '',
-          margenEdit: it.margen != null ? String(it.margen) : '',
-          precioEdit: it.precio != null ? String(it.precio) : '',
+          // for editable items use client values; for fixed items use asesor values
+          costoEdit:  it.requiere_cliente
+            ? (it.costo_cliente  != null ? String(it.costo_cliente)  : '')
+            : (it.costo  != null ? String(it.costo)  : ''),
+          margenEdit: it.requiere_cliente
+            ? (it.margen_cliente != null ? String(it.margen_cliente) : '')
+            : (it.margen != null ? String(it.margen) : ''),
+          precioEdit: it.requiere_cliente
+            ? (it.precio_cliente != null ? String(it.precio_cliente) : '')
+            : (it.precio != null ? String(it.precio) : ''),
         })));
         setLoading(false);
       })
@@ -66,12 +80,10 @@ export default function CotizacionClientePage() {
     setRows(prev => {
       const next = [...prev];
       const r = { ...next[idx], [field]: val };
-      // auto-calc precio from costo+margen
       if ((field === 'costoEdit' || field === 'margenEdit') && r.costoEdit && r.margenEdit) {
         const c = parseFloat(r.costoEdit); const m = parseFloat(r.margenEdit);
         if (!isNaN(c) && !isNaN(m)) r.precioEdit = String(Math.round(c * (1 + m / 100)));
       }
-      // auto-calc margen from costo+precio
       if ((field === 'costoEdit' || field === 'precioEdit') && r.costoEdit && r.precioEdit) {
         const c = parseFloat(r.costoEdit); const p = parseFloat(r.precioEdit);
         if (!isNaN(c) && c > 0 && !isNaN(p)) r.margenEdit = String(Math.round((p / c - 1) * 100 * 10) / 10);
@@ -81,28 +93,42 @@ export default function CotizacionClientePage() {
     });
   }, []);
 
-  const confirmar = async () => {
+  const buildItems = () =>
+    rows
+      .filter(r => r.requiere_cliente)
+      .map(r => ({
+        id: r.id,
+        costo:  r.costoEdit  ? parseFloat(r.costoEdit)  : null,
+        margen: r.margenEdit ? parseFloat(r.margenEdit) : null,
+        precio: r.precioEdit ? parseFloat(r.precioEdit) : null,
+      }));
+
+  const aprobar = async () => {
     setSending(true);
-    const items = rows.map(r => ({
-      id: r.id,
-      costo:  r.costoEdit  ? parseFloat(r.costoEdit)  : null,
-      margen: r.margenEdit ? parseFloat(r.margenEdit) : null,
-      precio: r.precioEdit ? parseFloat(r.precioEdit) : null,
-    }));
     await fetch(`/api/cotizacion-cliente/${token}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items, completar: true }),
+      body: JSON.stringify({ items: buildItems(), aprobar: true }),
     });
     setSending(false);
     setDone(true);
   };
 
+  const rechazar = async () => {
+    setSending(true);
+    await fetch(`/api/cotizacion-cliente/${token}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rechazar: true, comentario }),
+    });
+    setSending(false);
+    setDone('rechazada');
+  };
+
   const calcRows = rows.map(r => {
-    const p = r.precioEdit ? parseFloat(r.precioEdit) : (r.precio ?? 0);
+    const p = r.precioEdit ? parseFloat(r.precioEdit) : 0;
     return { ...r, precioFinal: p, total: p * r.cantidad };
   });
   const subtotal = calcRows.reduce((s, r) => s + r.total, 0);
-  const iva = Math.round(subtotal * 0.19);
+  const iva      = Math.round(subtotal * 0.19);
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center',
@@ -116,13 +142,32 @@ export default function CotizacionClientePage() {
       {error}
     </div>
   );
-  if (done || data?.cot.estado === 'completada') return (
+
+  // Done screens
+  if (done === 'rechazada' || data?.cot.estado === 'rechazada') return (
+    <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: 12,
+      fontFamily: '-apple-system, sans-serif', textAlign: 'center', padding: '0 24px' }}>
+      <span style={{ fontSize: '3rem' }}>✗</span>
+      <h2 style={{ color: TEXT, fontWeight: 800, margin: 0 }}>Cotización rechazada</h2>
+      <p style={{ color: MUTED, margin: 0, maxWidth: 300 }}>
+        Tu respuesta fue enviada al asesor.
+      </p>
+      <a href="/app/cliente/bandeja"
+        style={{ color: BLUE, fontSize: '0.85rem', marginTop: 8 }}>← Volver a mis cotizaciones</a>
+    </div>
+  );
+  if (done === true || data?.cot.estado === 'aprobada') return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', gap: 12,
       fontFamily: '-apple-system, sans-serif', textAlign: 'center', padding: '0 24px' }}>
       <span style={{ fontSize: '3rem' }}>✅</span>
-      <h2 style={{ color: TEXT, fontWeight: 800, margin: 0 }}>¡Cotización confirmada!</h2>
-      <p style={{ color: MUTED, margin: 0 }}>El asesor recibirá tu respuesta para procesar la cotización.</p>
+      <h2 style={{ color: TEXT, fontWeight: 800, margin: 0 }}>¡Cotización aprobada!</h2>
+      <p style={{ color: MUTED, margin: 0, maxWidth: 300 }}>
+        El asesor recibirá tu aprobación y procederá con la postulación.
+      </p>
+      <a href="/app/cliente/bandeja"
+        style={{ color: BLUE, fontSize: '0.85rem', marginTop: 8 }}>← Volver a mis cotizaciones</a>
     </div>
   );
 
@@ -141,6 +186,9 @@ export default function CotizacionClientePage() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontWeight: 900, fontSize: '0.9rem' }}>M</div>
           <span style={{ fontWeight: 700, fontSize: '0.9rem', opacity: 0.9 }}>Mercado Público</span>
+          <a href="/app/cliente/bandeja"
+            style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.65)',
+              fontSize: '0.75rem', textDecoration: 'none' }}>← Mis cotizaciones</a>
         </div>
         <h1 style={{ margin: '4px 0 2px', fontSize: '1rem', fontWeight: 700,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -158,7 +206,7 @@ export default function CotizacionClientePage() {
           display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 16px', fontSize: '0.82rem' }}>
           <InfoRow label="Cierre"    value={fechaCorta(data?.compra.fecha_cierre ?? null)} />
           <InfoRow label="Organismo" value={data?.compra.organismo_nombre ?? '—'} />
-          {data?.compra.monto && <InfoRow label="Presupuesto ref." value={pesos(data.compra.monto)} bold />}
+          {data?.compra.monto ? <InfoRow label="Presupuesto" value={pesos(data.compra.monto)} bold /> : null}
         </div>
 
         {/* Note from advisor */}
@@ -177,7 +225,6 @@ export default function CotizacionClientePage() {
         {/* Calculator table */}
         <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
           marginBottom: 14, overflow: 'hidden' }}>
-
           {/* Header */}
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 65px 100px 75px 100px 85px',
             gap: 6, padding: '9px 14px', fontSize: '0.65rem', fontWeight: 700,
@@ -193,7 +240,7 @@ export default function CotizacionClientePage() {
 
           {calcRows.map((r, idx) => {
             const editable = r.requiere_cliente;
-            const falta = editable && !r.precioEdit;
+            const falta    = editable && !r.precioEdit;
             return (
               <div key={r.id} style={{
                 display: 'grid', gridTemplateColumns: '2fr 65px 100px 75px 100px 85px',
@@ -260,7 +307,8 @@ export default function CotizacionClientePage() {
                 )}
                 {/* Total */}
                 <div style={{ textAlign: 'right', fontSize: '0.83rem',
-                  fontWeight: r.total > 0 ? 600 : 400, color: r.total > 0 ? TEXT : MUTED }}>
+                  fontWeight: r.total > 0 ? 600 : 400,
+                  color: r.total > 0 ? TEXT : MUTED }}>
                   {r.total > 0 ? pesos(r.total) : '—'}
                 </div>
               </div>
@@ -268,16 +316,16 @@ export default function CotizacionClientePage() {
           })}
 
           {/* Totals */}
-          <div style={{ borderTop: `2px solid ${BORDER}`, padding: '12px 14px', background: BG,
-            display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ borderTop: `2px solid ${BORDER}`, padding: '12px 14px',
+            background: BG, display: 'flex', justifyContent: 'flex-end' }}>
             <div style={{ minWidth: 200 }}>
               {[
                 { label: 'Subtotal neto', value: pesos(subtotal) },
                 { label: 'IVA 19%',       value: pesos(iva) },
-              ].map(r => (
-                <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between',
+              ].map(row => (
+                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between',
                   padding: '2px 0', fontSize: '0.83rem' }}>
-                  <span style={{ color: MUTED }}>{r.label}</span><span>{r.value}</span>
+                  <span style={{ color: MUTED }}>{row.label}</span><span>{row.value}</span>
                 </div>
               ))}
               <div style={{ display: 'flex', justifyContent: 'space-between',
@@ -289,16 +337,63 @@ export default function CotizacionClientePage() {
           </div>
         </div>
 
-        {/* Confirm button */}
-        <button onClick={confirmar} disabled={sending || needsInput} style={{
-          width: '100%', height: 50, borderRadius: 12, border: 'none', cursor: needsInput ? 'default' : 'pointer',
-          background: needsInput ? '#E5E7EB' : GREEN,
-          color: needsInput ? MUTED : WHITE,
-          fontFamily: 'inherit', fontSize: '0.95rem', fontWeight: 700 }}>
-          {sending ? 'Enviando…'
-            : needsInput ? 'Completa los precios marcados antes de confirmar'
-            : 'Confirmar cotización ✓'}
-        </button>
+        {/* Rejection comment box (appears when rechazando) */}
+        {rechazando && (
+          <div style={{ background: '#FEF2F2', borderRadius: 12, border: `1.5px solid #FCA5A5`,
+            padding: '14px', marginBottom: 14 }}>
+            <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: '0.82rem', color: '#DC2626' }}>
+              Motivo del rechazo (opcional)
+            </p>
+            <textarea
+              value={comentario}
+              onChange={e => setComentario(e.target.value)}
+              placeholder="Explica brevemente por qué no procede esta cotización…"
+              rows={3}
+              style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8,
+                border: '1.5px solid #FCA5A5', padding: '9px 11px', fontSize: '0.86rem',
+                fontFamily: 'inherit', color: TEXT, resize: 'vertical', lineHeight: 1.5,
+                outline: 'none', background: WHITE }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button onClick={() => setRechazando(false)}
+                style={{ flex: 1, height: 42, borderRadius: 10, border: `1.5px solid ${BORDER}`,
+                  background: WHITE, color: TEXT, fontFamily: 'inherit',
+                  fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button onClick={rechazar} disabled={sending}
+                style={{ flex: 2, height: 42, borderRadius: 10, border: 'none',
+                  background: '#DC2626', color: WHITE, fontFamily: 'inherit',
+                  fontSize: '0.85rem', fontWeight: 700,
+                  cursor: sending ? 'default' : 'pointer' }}>
+                {sending ? 'Enviando…' : 'Confirmar rechazo'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        {!rechazando && (
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => setRechazando(true)}
+              style={{ width: 110, height: 50, borderRadius: 12,
+                border: `1.5px solid #FCA5A5`, background: WHITE,
+                color: '#DC2626', fontFamily: 'inherit',
+                fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+              Rechazar
+            </button>
+            <button onClick={aprobar} disabled={sending || needsInput}
+              style={{ flex: 1, height: 50, borderRadius: 12, border: 'none',
+                cursor: (sending || needsInput) ? 'default' : 'pointer',
+                background: needsInput ? '#E5E7EB' : GREEN,
+                color: needsInput ? MUTED : WHITE,
+                fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 700 }}>
+              {sending ? 'Enviando…'
+                : needsInput ? 'Completa los precios primero'
+                : 'Aprobar cotización ✓'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
