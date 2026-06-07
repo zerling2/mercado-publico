@@ -26,9 +26,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'empresa_nombre y rut son requeridos' }, { status: 400 });
   }
 
-  const { data, error } = await supabase()
+  const sb = supabase();
+
+  // Check if RUT already exists
+  const { data: existing } = await sb
     .from('users')
-    .upsert({ empresa_nombre, rut, email, rubros_json, region }, { onConflict: 'rut' })
+    .select('id')
+    .eq('rut', rut)
+    .maybeSingle();
+
+  if (existing) {
+    return NextResponse.json({ success: true, id: existing.id });
+  }
+
+  const { data, error } = await sb
+    .from('users')
+    .insert({ empresa_nombre, rut, email, rubros_json, region })
     .select('id')
     .single();
 
