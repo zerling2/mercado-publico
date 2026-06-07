@@ -4,26 +4,13 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 const BLUE = '#003DA5';
-const BLUE_LIGHT = '#E8EEFA';
-const TEXT = '#0A0A0A';
+const BLUE_DARK = '#00297A';
+const TEXT = '#111827';
 const MUTED = '#6B7280';
 const BORDER = '#E5E7EB';
 const WHITE = '#FFFFFF';
-
-const btn = (primary = true): React.CSSProperties => ({
-  height: 48, borderRadius: 12, border: 'none', cursor: 'pointer',
-  fontFamily: 'inherit', fontSize: '0.95rem', fontWeight: 600,
-  padding: '0 20px',
-  background: primary ? BLUE : WHITE,
-  color: primary ? WHITE : BLUE,
-  ...(primary ? {} : { border: `1.5px solid ${BLUE}` }),
-});
-
-const input: React.CSSProperties = {
-  height: 44, borderRadius: 10, border: `1.5px solid ${BORDER}`,
-  padding: '0 14px', fontSize: '0.95rem', width: '100%', boxSizing: 'border-box',
-  fontFamily: 'inherit', outline: 'none', color: TEXT,
-};
+const BG = '#F9FAFB';
+const GREEN = '#059669';
 
 interface Usuario {
   id: string;
@@ -33,6 +20,12 @@ interface Usuario {
   rubros_json?: string[];
   region?: string;
 }
+
+const inputStyle: React.CSSProperties = {
+  height: 44, borderRadius: 10, border: `1.5px solid ${BORDER}`,
+  padding: '0 14px', fontSize: '0.9rem', width: '100%', boxSizing: 'border-box',
+  fontFamily: 'inherit', color: TEXT,
+};
 
 export default function DashboardIndexPage() {
   const router = useRouter();
@@ -56,7 +49,7 @@ export default function DashboardIndexPage() {
     const res = await fetch('/api/usuarios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, rubros_json }),
+      body: JSON.stringify({ empresa_nombre: form.empresa_nombre, rut: form.rut, email: form.email, rubros_json, region: form.region }),
     });
     const json = await res.json();
     setSaving(false);
@@ -66,86 +59,166 @@ export default function DashboardIndexPage() {
 
   return (
     <div style={{
-      minHeight: '100vh', background: '#F9FAFB',
+      minHeight: '100vh', background: BG,
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif',
       maxWidth: 600, margin: '0 auto',
     }}>
-      <header style={{ background: BLUE, color: WHITE, padding: '20px 20px 16px' }}>
-        <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Mercado Público</h1>
-        <p style={{ margin: '2px 0 0', fontSize: '0.8rem', opacity: 0.7 }}>Selecciona o agrega un cliente</p>
+      {/* Header */}
+      <header style={{
+        background: `linear-gradient(135deg, ${BLUE_DARK} 0%, ${BLUE} 100%)`,
+        color: WHITE, padding: '24px 20px 20px',
+      }}>
+        <h1 style={{ margin: '0 0 2px', fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.02em' }}>
+          Mercado Público
+        </h1>
+        <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>
+          Gestión de licitaciones para tus clientes
+        </p>
       </header>
 
       <div style={{ padding: '20px 16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        {/* Add button */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: TEXT }}>Empresas</h2>
-            <p style={{ margin: 0, fontSize: '0.8rem', color: MUTED }}>{usuarios.length} registrada{usuarios.length !== 1 ? 's' : ''}</p>
+            <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: TEXT }}>
+              {loading ? '…' : `${usuarios.length} empresa${usuarios.length !== 1 ? 's' : ''}`}
+            </h2>
           </div>
-          <button style={btn()} onClick={() => setShowForm(v => !v)}>
+          <button
+            onClick={() => setShowForm(v => !v)}
+            style={{
+              height: 40, borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: BLUE, color: WHITE, fontFamily: 'inherit',
+              fontSize: '0.875rem', fontWeight: 600, padding: '0 16px',
+            }}
+          >
             {showForm ? 'Cancelar' : '+ Nuevo RUT'}
           </button>
         </div>
 
+        {/* Add form */}
         {showForm && (
-          <div style={{ background: BLUE_LIGHT, borderRadius: 16, padding: '16px 20px', marginBottom: 20 }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: '1rem', color: BLUE }}>Agregar empresa</h3>
+          <div style={{
+            background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`,
+            padding: '16px', marginBottom: 16,
+          }}>
+            <h3 style={{ margin: '0 0 14px', fontSize: '0.95rem', fontWeight: 700, color: TEXT }}>
+              Agregar empresa cliente
+            </h3>
             {[
-              { key: 'empresa_nombre', label: 'Nombre empresa' },
+              { key: 'empresa_nombre', label: 'Nombre empresa', placeholder: 'Imprenta Ejemplo Ltda.' },
               { key: 'rut', label: 'RUT', placeholder: '12.345.678-9' },
-              { key: 'email', label: 'Email' },
+              { key: 'email', label: 'Email (opcional)', placeholder: '' },
               { key: 'rubros', label: 'Rubros (separados por coma)', placeholder: 'impresión, vestuario, grabados' },
-              { key: 'region', label: 'Región' },
+              { key: 'region', label: 'Región (opcional)', placeholder: 'Región de Los Ríos' },
             ].map(({ key, label, placeholder }) => (
               <div key={key} style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: '0.8rem', color: MUTED, display: 'block', marginBottom: 4 }}>{label}</label>
+                <label style={{ fontSize: '0.78rem', color: MUTED, display: 'block', marginBottom: 3 }}>
+                  {label}
+                </label>
                 <input
-                  style={input}
-                  placeholder={placeholder ?? ''}
+                  style={inputStyle}
+                  placeholder={placeholder}
                   value={form[key as keyof typeof form]}
                   onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
                 />
               </div>
             ))}
-            {error && <p style={{ color: 'red', fontSize: '0.85rem', margin: '8px 0' }}>{error}</p>}
-            <button style={{ ...btn(), marginTop: 8 }} onClick={guardar} disabled={saving}>
-              {saving ? 'Guardando…' : 'Agregar empresa'}
+            {error && <p style={{ color: '#DC2626', fontSize: '0.85rem', margin: '6px 0' }}>{error}</p>}
+            <button
+              style={{ height: 44, borderRadius: 10, border: 'none', cursor: 'pointer',
+                background: BLUE, color: WHITE, fontFamily: 'inherit', fontSize: '0.9rem',
+                fontWeight: 600, width: '100%', marginTop: 4 }}
+              onClick={guardar}
+              disabled={saving}
+            >
+              {saving ? 'Guardando…' : 'Agregar y abrir dashboard'}
             </button>
           </div>
         )}
 
+        {/* Empresa list */}
         {loading ? (
           <p style={{ color: MUTED, textAlign: 'center', padding: 40 }}>Cargando…</p>
         ) : usuarios.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 48 }}>
-            <p style={{ color: MUTED }}>No hay empresas aún.</p>
-            <button style={{ ...btn(), marginTop: 12 }} onClick={() => setShowForm(true)}>Agregar primera empresa</button>
+          <div style={{ textAlign: 'center', padding: 60 }}>
+            <p style={{ fontSize: '2rem', margin: '0 0 12px' }}>🏢</p>
+            <p style={{ color: TEXT, fontWeight: 600, margin: '0 0 6px' }}>Sin empresas registradas</p>
+            <p style={{ color: MUTED, fontSize: '0.85rem', margin: '0 0 16px' }}>
+              Agrega tu primer cliente con el botón "+ Nuevo RUT".
+            </p>
           </div>
         ) : (
-          usuarios.map(u => (
-            <button
-              key={u.id}
-              onClick={() => router.push(`/app/dashboard/${u.id}`)}
-              style={{
-                width: '100%', textAlign: 'left', background: WHITE,
-                borderRadius: 16, border: `1px solid ${BORDER}`, padding: '16px 20px',
-                marginBottom: 12, cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <p style={{ margin: 0, fontWeight: 700, fontSize: '1rem', color: TEXT }}>{u.empresa_nombre}</p>
-                  <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: MUTED }}>RUT {u.rut}</p>
-                  {u.rubros_json?.length ? (
-                    <p style={{ margin: '6px 0 0', fontSize: '0.75rem', color: BLUE }}>
-                      {u.rubros_json.join(' · ')}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {usuarios.map(u => (
+              <button
+                key={u.id}
+                onClick={() => router.push(`/app/dashboard/${u.id}`)}
+                style={{
+                  background: WHITE, borderRadius: 14, border: `1px solid ${BORDER}`,
+                  padding: '14px 16px', cursor: 'pointer', fontFamily: 'inherit',
+                  textAlign: 'left', width: '100%',
+                  transition: 'box-shadow 0.15s',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: TEXT }}>
+                      {u.empresa_nombre}
                     </p>
-                  ) : null}
+                    <p style={{ margin: '2px 0 8px', fontSize: '0.78rem', color: MUTED }}>
+                      RUT {u.rut}
+                    </p>
+                    {u.rubros_json?.length ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {u.rubros_json.slice(0, 4).map(r => (
+                          <span key={r} style={{
+                            background: BLUE + '12', color: BLUE,
+                            fontSize: '0.72rem', fontWeight: 600,
+                            padding: '2px 8px', borderRadius: 99,
+                          }}>
+                            {r}
+                          </span>
+                        ))}
+                        {(u.rubros_json.length ?? 0) > 4 && (
+                          <span style={{ fontSize: '0.72rem', color: MUTED, padding: '2px 0' }}>
+                            +{u.rubros_json.length - 4} más
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: '#F59E0B' }}>
+                        ⚠ Sin rubros configurados
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ color: MUTED, fontSize: '1rem', flexShrink: 0, paddingLeft: 8 }}>›</span>
                 </div>
-                <span style={{ color: BLUE, fontSize: '1.2rem' }}>›</span>
-              </div>
-            </button>
-          ))
+              </button>
+            ))}
+          </div>
         )}
+
+        {/* Quick links */}
+        <div style={{ marginTop: 24, padding: '14px 16px', background: WHITE,
+          borderRadius: 14, border: `1px solid ${BORDER}` }}>
+          <p style={{ margin: '0 0 10px', fontSize: '0.8rem', fontWeight: 700, color: MUTED }}>
+            ACCESOS RÁPIDOS
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {[
+              { href: '/dashboard', label: 'Dashboard clásico GUIDO' },
+              { href: '/api/buscar-relevancia', label: 'Recalcular relevancia (API)' },
+            ].map(l => (
+              <a key={l.href} href={l.href} style={{
+                fontSize: '0.85rem', color: BLUE, fontWeight: 500, textDecoration: 'none',
+                padding: '4px 0',
+              }}>
+                {l.label} →
+              </a>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
