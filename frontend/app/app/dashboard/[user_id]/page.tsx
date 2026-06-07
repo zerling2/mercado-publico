@@ -22,12 +22,17 @@ interface CompraDetalle {
   monto: number | null;
   region: string | null;
   fecha_cierre: string | null;
+  organismo_nombre: string | null;
 }
 
 interface Oportunidad {
+  relevancia_id: string;
   compra_agil_id: string;
   relevancia_score: number;
   razon_match: string | null;
+  visto: boolean;
+  cotizacion_descargada: boolean;
+  comentario: string | null;
   compra?: CompraDetalle;
 }
 
@@ -351,7 +356,7 @@ function Field({ label, value, bold }: { label: string; value: string; bold?: bo
 
 // ─── Oportunidad Card ─────────────────────────────────────────────────────────
 
-function OportunidadCard({ o }: { o: Oportunidad }) {
+function OportunidadCard({ o, userId, onVisto }: { o: Oportunidad; userId: string; onVisto: (id: string) => void }) {
   const [expandido, setExpandido] = useState(false);
   const c = o.compra;
   if (!c) return null;
@@ -361,14 +366,29 @@ function OportunidadCard({ o }: { o: Oportunidad }) {
   const pasado = dias !== null && dias < 0;
   const color = scoreColor(o.relevancia_score);
 
+  const handleExpand = async () => {
+    const abriendo = !expandido;
+    setExpandido(abriendo);
+    if (abriendo && !o.visto) {
+      onVisto(o.relevancia_id);
+      await fetch(`/api/cotizacion/${userId}/${encodeURIComponent(c.codigo)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visto: true }),
+      });
+    }
+  };
+
   return (
     <div style={{
-      background: WHITE, borderRadius: 14, border: `1px solid ${BORDER}`,
+      background: WHITE, borderRadius: 14,
+      border: `1.5px solid ${!o.visto ? BLUE + '60' : BORDER}`,
       marginBottom: 10, overflow: 'hidden',
+      boxShadow: !o.visto ? `0 0 0 1px ${BLUE}20` : 'none',
     }}>
       {/* Main row — tap to expand */}
       <button
-        onClick={() => setExpandido(v => !v)}
+        onClick={handleExpand}
         style={{
           width: '100%', textAlign: 'left', background: 'none', border: 'none',
           cursor: 'pointer', padding: '14px 16px', fontFamily: 'inherit',
@@ -376,24 +396,39 @@ function OportunidadCard({ o }: { o: Oportunidad }) {
         }}
       >
         {/* Score badge */}
-        <div style={{
-          flexShrink: 0, background: color + '15', border: `1px solid ${color}30`,
-          borderRadius: 8, padding: '4px 8px', textAlign: 'center', minWidth: 48,
-        }}>
-          <div style={{ fontSize: '1rem', fontWeight: 800, color, lineHeight: 1 }}>{o.relevancia_score}</div>
-          <div style={{ fontSize: '0.6rem', fontWeight: 700, color, textTransform: 'uppercase', marginTop: 1 }}>
-            {scoreLabel(o.relevancia_score)}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <div style={{
+            background: color + '15', border: `1px solid ${color}30`,
+            borderRadius: 8, padding: '4px 8px', textAlign: 'center', minWidth: 48,
+          }}>
+            <div style={{ fontSize: '1rem', fontWeight: 800, color, lineHeight: 1 }}>{o.relevancia_score}</div>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, color, textTransform: 'uppercase', marginTop: 1 }}>
+              {scoreLabel(o.relevancia_score)}
+            </div>
           </div>
+          {/* Unread blue dot */}
+          {!o.visto && (
+            <span style={{
+              position: 'absolute', top: -4, right: -4, width: 10, height: 10,
+              borderRadius: '50%', background: BLUE, border: `2px solid ${WHITE}`,
+            }} />
+          )}
         </div>
 
         {/* Content */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: TEXT,
+          <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: o.visto ? 600 : 700, color: TEXT,
             lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
             {c.nombre}
           </p>
           <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {c.organismo_nombre && (
+              <span style={{ fontSize: '0.75rem', color: MUTED,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
+                {c.organismo_nombre}
+              </span>
+            )}
             {c.monto && (
               <span style={{ fontSize: '0.85rem', fontWeight: 700, color: TEXT }}>
                 {pesos(c.monto)}
@@ -408,11 +443,25 @@ function OportunidadCard({ o }: { o: Oportunidad }) {
               </span>
             )}
             {pasado && <span style={{ fontSize: '0.78rem', color: MUTED }}>Vencida</span>}
-            {c.region && <span style={{ fontSize: '0.75rem', color: MUTED }}>{c.region}</span>}
+            {/* PDF downloaded indicator */}
+            {o.cotizacion_descargada && (
+              <span style={{ fontSize: '0.72rem', background: '#D1FAE5', color: '#065F46',
+                padding: '1px 7px', borderRadius: 99, fontWeight: 600 }}>
+                PDF ✓
+              </span>
+            )}
           </div>
           {o.razon_match && (
             <p style={{ margin: '5px 0 0', fontSize: '0.72rem', color: BLUE }}>
               {o.razon_match}
+            </p>
+          )}
+          {/* Comment preview */}
+          {o.comentario && (
+            <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: MUTED,
+              fontStyle: 'italic', display: '-webkit-box', WebkitLineClamp: 1,
+              WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              "{o.comentario}"
             </p>
           )}
         </div>
@@ -430,12 +479,12 @@ function OportunidadCard({ o }: { o: Oportunidad }) {
           {/* Action button */}
           <div style={{ marginBottom: 16 }}>
             <Link
-              href={`/dashboard/compra/${encodeURIComponent(c.codigo)}`}
+              href={`/app/cotizacion/${userId}/${encodeURIComponent(c.codigo)}`}
               style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center',
                 height: 44, textDecoration: 'none', fontSize: '0.9rem', width: '100%',
                 justifyContent: 'center' }}
             >
-              Generar propuesta →
+              Cotizar / generar propuesta →
             </Link>
           </div>
 
@@ -461,8 +510,9 @@ function OportunidadesTab({
   const [oportunidades, setOportunidades] = useState<Oportunidad[]>([]);
   const [loading, setLoading] = useState(true);
   const [calculando, setCalculando] = useState(false);
+  const [analizando, setAnalizando] = useState(false);
   const [msg, setMsg] = useState('');
-  const [filtro, setFiltro] = useState<'todas' | 'alta' | 'urgente'>('todas');
+  const [filtro, setFiltro] = useState<'todas' | 'alta' | 'urgente' | 'novistas'>('todas');
 
   const cargar = useCallback(() => {
     setLoading(true);
@@ -497,12 +547,39 @@ function OportunidadesTab({
     }
   };
 
+  const analizarIA = async () => {
+    setAnalizando(true);
+    setMsg('');
+    const res = await fetch(`/api/clientes/${userId}/matching`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limite: 20 }),
+    });
+    const json = await res.json();
+    setAnalizando(false);
+    if (json.error) {
+      setMsg(`Error: ${json.error}`);
+    } else {
+      setMsg(`IA analizó ${json.procesadas} compras, actualizó ${json.actualizadas}`);
+      cargar();
+    }
+  };
+
+  const marcarVisto = (relevanciaId: string) => {
+    setOportunidades(prev =>
+      prev.map(o => o.relevancia_id === relevanciaId ? { ...o, visto: true } : o)
+    );
+  };
+
+  const noVistas = oportunidades.filter(o => !o.visto).length;
+
   const filtradas = oportunidades.filter(o => {
     if (filtro === 'alta') return o.relevancia_score >= 60;
     if (filtro === 'urgente') {
       const d = diasParaCierre(o.compra?.fecha_cierre ?? null);
       return d !== null && d >= 0 && d <= 7;
     }
+    if (filtro === 'novistas') return !o.visto;
     return true;
   });
 
@@ -510,17 +587,28 @@ function OportunidadesTab({
     <div style={{ padding: '16px' }}>
       {/* Actions row */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <button style={{ ...btnPrimary, flex: 1, fontSize: '0.85rem' }}
-          onClick={calcular} disabled={calculando}>
-          {calculando ? 'Buscando…' : '↻ Buscar oportunidades'}
+        <button style={{ ...btnPrimary, flex: 1, fontSize: '0.82rem' }}
+          onClick={calcular} disabled={calculando || analizando}>
+          {calculando ? 'Buscando…' : '↻ Buscar'}
+        </button>
+        <button
+          onClick={analizarIA}
+          disabled={calculando || analizando || oportunidades.length === 0}
+          style={{
+            ...btnSecondary, flex: 1, fontSize: '0.82rem',
+            opacity: oportunidades.length === 0 ? 0.5 : 1,
+          }}
+        >
+          {analizando ? 'Analizando…' : '🤖 Análisis IA'}
         </button>
       </div>
 
       {/* Filter chips */}
       {oportunidades.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
           {[
             { key: 'todas', label: `Todas (${oportunidades.length})` },
+            { key: 'novistas', label: `No vistas${noVistas > 0 ? ` (${noVistas})` : ''}` },
             { key: 'alta', label: 'Alta relevancia' },
             { key: 'urgente', label: '⚡ Urgentes' },
           ].map(f => (
@@ -541,7 +629,8 @@ function OportunidadesTab({
       )}
 
       {msg && (
-        <p style={{ fontSize: '0.85rem', color: BLUE, marginBottom: 10, fontWeight: 500 }}>{msg}</p>
+        <p style={{ fontSize: '0.85rem', color: msg.startsWith('Error') ? RED : BLUE,
+          marginBottom: 10, fontWeight: 500 }}>{msg}</p>
       )}
 
       {loading ? (
@@ -551,7 +640,7 @@ function OportunidadesTab({
           <p style={{ color: MUTED, fontSize: '1.5rem', margin: '0 0 12px' }}>🔍</p>
           <p style={{ color: TEXT, fontWeight: 600, margin: '0 0 6px' }}>Sin oportunidades todavía</p>
           <p style={{ color: MUTED, fontSize: '0.85rem', margin: 0 }}>
-            Presiona "Buscar oportunidades" para analizar las compras ágiles del portal.
+            Presiona "Buscar" para analizar las compras ágiles del portal.
           </p>
           {!usuario?.rubros_json?.length && (
             <p style={{ color: RED, fontSize: '0.85rem', marginTop: 8 }}>
@@ -560,7 +649,9 @@ function OportunidadesTab({
           )}
         </div>
       ) : (
-        filtradas.map(o => <OportunidadCard key={o.compra_agil_id} o={o} />)
+        filtradas.map(o => (
+          <OportunidadCard key={o.compra_agil_id} o={o} userId={userId} onVisto={marcarVisto} />
+        ))
       )}
     </div>
   );
