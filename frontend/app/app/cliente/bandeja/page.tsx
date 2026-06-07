@@ -31,14 +31,14 @@ interface BandejaData {
 
 function estadoBadge(estado: string) {
   const map: Record<string, { label: string; bg: string; color: string }> = {
-    enviada:   { label: 'Nueva',     bg: '#FFFBEB', color: AMBER },
-    vista:     { label: 'Vista',     bg: '#EFF6FF', color: BLUE  },
-    aprobada:  { label: 'Aprobada',  bg: '#ECFDF5', color: GREEN },
-    rechazada: { label: 'Rechazada', bg: '#FEF2F2', color: RED   },
-    postulada: { label: 'Postulada', bg: '#EFF6FF', color: BLUE  },
-    ganada:    { label: 'Ganada',    bg: '#ECFDF5', color: GREEN },
-    perdida:   { label: 'Perdida',   bg: '#FEF2F2', color: RED   },
-    desierta:  { label: 'Desierta',  bg: '#FFFBEB', color: AMBER },
+    enviada:   { label: 'Nueva',           bg: '#FFFBEB', color: AMBER },
+    vista:     { label: 'Vista',           bg: '#EFF6FF', color: BLUE  },
+    aprobada:  { label: 'Postulada',       bg: '#ECFDF5', color: GREEN },
+    rechazada: { label: 'Rechazada',       bg: '#FEF2F2', color: RED   },
+    postulada: { label: 'Postulada',       bg: '#ECFDF5', color: GREEN },
+    ganada:    { label: 'Adjudicada',      bg: '#ECFDF5', color: GREEN },
+    perdida:   { label: 'No adjudicada',   bg: '#FEF2F2', color: RED   },
+    desierta:  { label: 'Desierta',        bg: '#FFFBEB', color: AMBER },
   };
   const s = map[estado] ?? { label: estado, bg: '#F3F4F6', color: MUTED };
   return (

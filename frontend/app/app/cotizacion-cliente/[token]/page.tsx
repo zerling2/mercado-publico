@@ -17,12 +17,13 @@ interface Item {
   precio_cliente: number | null;
 }
 interface Data {
-  cot: { estado: string; notas: string | null; enviada_at: string; respondida_at: string | null };
+  cot: { estado: string; notas: string | null; enviada_at: string; respondida_at: string | null; postulada_at: string | null; quien_postulo: string | null };
   compra: { codigo: string; nombre: string; organismo_nombre: string | null; fecha_cierre: string | null; monto: number | null };
   usuario: { empresa_nombre: string; rut: string };
   items: Item[];
 }
 interface Row extends Item { costoEdit: string; margenEdit: string; precioEdit: string }
+type DoneState = 'aprobada' | 'rechazada' | 'postulada' | 'ganada' | 'perdida' | 'desierta';
 
 const BLUE = '#003DA5'; const BLUE_D = '#00297A';
 const GREEN = '#059669'; const RED = '#DC2626';
@@ -57,7 +58,7 @@ export default function CotizacionClientePage() {
   const [sending, setSending]   = useState(false);
   const [rechazando, setRechazando] = useState(false);
   const [comentarioRechazo, setComentarioRechazo] = useState('');
-  const [done, setDone]         = useState<'aprobada' | 'rechazada' | null>(null);
+  const [done, setDone]         = useState<DoneState | null>(null);
 
   useEffect(() => {
     fetch(`/api/cotizacion-cliente/${token}`)
@@ -65,10 +66,10 @@ export default function CotizacionClientePage() {
       .then(d => {
         if (d.error) { setError(d.error); return; }
         setData(d);
-        const estado = d.cot?.estado;
-        if (estado === 'aprobada')  setDone('aprobada');
-        if (estado === 'rechazada') setDone('rechazada');
-        // Rows always loaded so the user can re-open and modify
+        const estado = d.cot?.estado as DoneState | string;
+        const terminalStates: DoneState[] = ['aprobada', 'rechazada', 'postulada', 'ganada', 'perdida', 'desierta'];
+        if (terminalStates.includes(estado as DoneState)) setDone(estado as DoneState);
+        // Rows always loaded so the user can re-open and modify if allowed
         setRows((d.items ?? []).map((it: Item) => ({
           ...it,
           costoEdit:  (it.costo_cliente  ?? it.costo)  != null ? String(it.costo_cliente  ?? it.costo)  : '',
@@ -159,53 +160,42 @@ export default function CotizacionClientePage() {
       justifyContent: 'center', fontFamily: '-apple-system, sans-serif', color: RED }}>{error}</div>
   );
 
-  if (done === 'aprobada') return (
-    <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', gap: 16,
-      fontFamily: '-apple-system, sans-serif', textAlign: 'center', padding: '0 24px' }}>
-      <div style={{ fontSize: '3.5rem' }}>✅</div>
-      <h2 style={{ color: TEXT, fontWeight: 800, margin: 0 }}>¡Cotización aprobada!</h2>
-      <p style={{ color: MUTED, margin: 0 }}>El asesor recibirá tu confirmación.</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 320, marginTop: 8 }}>
-        <button onClick={() => router.push('/app/cliente/bandeja')}
-          style={{ height: 44, borderRadius: 10, border: 'none',
-            background: BLUE, color: WHITE, fontFamily: 'inherit',
-            fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
-          Ver mis cotizaciones →
-        </button>
-        <button onClick={() => setDone(null)}
-          style={{ height: 40, borderRadius: 10, border: `1.5px solid ${BORDER}`,
-            background: WHITE, color: MUTED, fontFamily: 'inherit',
-            fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
-          Modificar mi respuesta
-        </button>
+  if (done !== null) {
+    const DONE_CONFIG: Record<DoneState, { emoji: string; titulo: string; subtitulo: string; canModify: boolean }> = {
+      aprobada:  { emoji: '✅', titulo: '¡Precios confirmados!',         subtitulo: 'El asesor preparará la postulación.',           canModify: true  },
+      rechazada: { emoji: '❌', titulo: 'Cotización rechazada',           subtitulo: 'El asesor quedó notificado.',                   canModify: true  },
+      postulada: { emoji: '📤', titulo: 'Propuesta enviada al organismo', subtitulo: 'La postulación ya fue presentada por tu asesor.', canModify: false },
+      ganada:    { emoji: '🏆', titulo: '¡Oferta adjudicada!',           subtitulo: 'Felicitaciones, ganaron la licitación.',         canModify: false },
+      perdida:   { emoji: '📋', titulo: 'No adjudicada',                 subtitulo: 'La licitación fue adjudicada a otro proveedor.', canModify: false },
+      desierta:  { emoji: '📋', titulo: 'Licitación desierta',           subtitulo: 'El organismo declaró la licitación desierta.',   canModify: false },
+    };
+    const cfg = DONE_CONFIG[done];
+    return (
+      <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 16,
+        fontFamily: '-apple-system, sans-serif', textAlign: 'center', padding: '0 24px' }}>
+        <div style={{ fontSize: '3.5rem' }}>{cfg.emoji}</div>
+        <h2 style={{ color: TEXT, fontWeight: 800, margin: 0 }}>{cfg.titulo}</h2>
+        <p style={{ color: MUTED, margin: 0 }}>{cfg.subtitulo}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 320, marginTop: 8 }}>
+          <button onClick={() => router.push('/app/cliente/bandeja')}
+            style={{ height: 44, borderRadius: 10, border: 'none',
+              background: BLUE, color: WHITE, fontFamily: 'inherit',
+              fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+            Ver mis cotizaciones →
+          </button>
+          {cfg.canModify && (
+            <button onClick={() => setDone(null)}
+              style={{ height: 40, borderRadius: 10, border: `1.5px solid ${BORDER}`,
+                background: WHITE, color: MUTED, fontFamily: 'inherit',
+                fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+              Modificar mi respuesta
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  );
-
-  if (done === 'rechazada') return (
-    <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', gap: 16,
-      fontFamily: '-apple-system, sans-serif', textAlign: 'center', padding: '0 24px' }}>
-      <div style={{ fontSize: '3.5rem' }}>❌</div>
-      <h2 style={{ color: TEXT, fontWeight: 800, margin: 0 }}>Cotización rechazada</h2>
-      <p style={{ color: MUTED, margin: 0 }}>El asesor quedó notificado.</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 320, marginTop: 8 }}>
-        <button onClick={() => router.push('/app/cliente/bandeja')}
-          style={{ height: 44, borderRadius: 10, border: 'none',
-            background: BLUE, color: WHITE, fontFamily: 'inherit',
-            fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
-          Ver mis cotizaciones →
-        </button>
-        <button onClick={() => setDone(null)}
-          style={{ height: 40, borderRadius: 10, border: `1.5px solid ${BORDER}`,
-            background: WHITE, color: MUTED, fontFamily: 'inherit',
-            fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
-          Modificar mi respuesta
-        </button>
-      </div>
-    </div>
-  );
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: BG,
