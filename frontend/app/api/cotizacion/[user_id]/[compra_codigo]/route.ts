@@ -32,7 +32,6 @@ async function fetchAndSaveProductos(compraId: string, compraCode: string): Prom
     unidad_medida?: string;
   }> = raw?.productos_solicitados ?? raw?.items ?? [];
 
-  // Enrich compras_agiles row
   await sb().from('compras_agiles').update({
     organismo_rut:      inst?.rut ?? null,
     organismo_nombre:   inst?.organismo_comprador ?? inst?.nombre ?? null,
@@ -56,7 +55,6 @@ async function fetchAndSaveProductos(compraId: string, compraCode: string): Prom
     );
   }
 
-  // Upsert organismo
   if (inst?.rut) {
     await sb().from('organismos').upsert({
       rut:              inst.rut,
@@ -73,7 +71,6 @@ async function fetchAndSaveProductos(compraId: string, compraCode: string): Prom
 export async function GET(_req: NextRequest, { params }: { params: Params }) {
   const { user_id, compra_codigo } = params;
 
-  // Load compra
   const { data: compra } = await sb()
     .from('compras_agiles')
     .select('id, codigo, nombre, organismo_nombre, organismo_rut, monto, region, fecha_cierre, descripcion, lugar_entrega, plazo_entrega_dias, productos_extraidos')
@@ -82,10 +79,8 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
 
   if (!compra) return NextResponse.json({ error: 'Compra no encontrada' }, { status: 404 });
 
-  // If products haven't been fetched yet, do it now (on demand)
   if (!compra.productos_extraidos) {
     await fetchAndSaveProductos(compra.id, compra.codigo);
-    // Reload updated compra data
     const { data: updated } = await sb()
       .from('compras_agiles')
       .select('organismo_nombre, descripcion, lugar_entrega, plazo_entrega_dias')
@@ -99,21 +94,18 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
     }
   }
 
-  // Load products
   const { data: productos } = await sb()
     .from('compra_productos')
     .select('id, nombre, descripcion, cantidad, unidad_medida')
     .eq('compra_agil_id', compra.id)
     .order('id');
 
-  // AI matchings for this user × compra
   const { data: matchings } = await sb()
     .from('compra_matchings')
     .select('compra_producto_id, estado, precio_sugerido, confianza, notas_ia, catalogo_producto_id')
     .eq('compra_agil_id', compra.id)
     .eq('user_id', user_id);
 
-  // Catalog items referenced
   const catalogoIds = matchings?.map(m => m.catalogo_producto_id).filter(Boolean) ?? [];
   const { data: catalogoItems } = catalogoIds.length
     ? await sb().from('catalogo_empresas').select('id, nombre, precio_base, unidad').in('id', catalogoIds)
@@ -121,7 +113,6 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
   const catalogoMap = new Map((catalogoItems ?? []).map(c => [c.id, c]));
   const matchMap    = new Map((matchings ?? []).map(m => [m.compra_producto_id, m]));
 
-  // Relevancia record (internal comment, visto, score)
   const { data: rel } = await sb()
     .from('relevancia_compras')
     .select('id, comentario, visto, cotizacion_descargada, relevancia_score')
@@ -129,10 +120,9 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
     .eq('compra_agil_id', compra.id)
     .maybeSingle();
 
-  // Cotizacion record (client-facing notes)
   const { data: cot } = await sb()
     .from('cotizaciones')
-    .select('notas')
+    .select('id, notas, estado, respuesta_cliente, comentario_rechazo, respondida_at, postulada_at, quien_postulo, token')
     .eq('user_id', user_id)
     .eq('compra_agil_id', compra.id)
     .maybeSingle();
@@ -168,8 +158,18 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
       plazo_entrega_dias: compra.plazo_entrega_dias,
     },
     items,
-    relevancia: rel ?? null,
+    relevancia:    rel ?? null,
     notas_cliente: cot?.notas ?? '',
+    cotizacion: cot ? {
+      id:                cot.id,
+      estado:            cot.estado,
+      respuesta_cliente: cot.respuesta_cliente,
+      comentario_rechazo: cot.comentario_rechazo,
+      respondida_at:     cot.respondida_at,
+      postulada_at:      cot.postulada_at,
+      quien_postulo:     cot.quien_postulo,
+      token:             cot.token,
+    } : null,
   });
 }
 
@@ -185,20 +185,52 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
 
   if (!compra) return NextResponse.json({ error: 'Compra no encontrada' }, { status: 404 });
 
-  const updates: Record<string, unknown> = {};
-  if ('comentario'             in body) updates.comentario             = body.comentario;
-  if ('cotizacion_descargada'  in body) updates.cotizacion_descargada  = body.cotizacion_descargada;
+  // Update relevancia_compras (comentario interno, visto, etc.)
+  const relUpdates: Record<string, unknown> = {};
+  if ('comentario'            in body) relUpdates.comentario            = body.comentario;
+  if ('cotizacion_descargada' in body) relUpdates.cotizacion_descargada = body.cotizacion_descargada;
   if ('visto' in body) {
-    updates.visto = body.visto;
-    if (body.visto) updates.fecha_visto = new Date().toISOString();
+    relUpdates.visto = body.visto;
+    if (body.visto) relUpdates.fecha_visto = new Date().toISOString();
   }
 
-  const { error } = await sb()
-    .from('relevancia_compras')
-    .update(updates)
+  if (Object.keys(relUpdates).length > 0) {
+    await sb()
+      .from('relevancia_compras')
+      .update(relUpdates)
+      .eq('user_id', user_id)
+      .eq('compra_agil_id', compra.id);
+  }
+
+  // Update cotizaciones.notas (client-facing notes)
+  if ('notas_cliente' in body) {
+    await sb().from('cotizaciones').upsert({
+      user_id,
+      compra_agil_id: compra.id,
+      notas: body.notas_cliente ?? null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,compra_agil_id', ignoreDuplicates: false });
+  }
+
+  // Mark as postulada (submitted to portal)
+  if (body.postulada) {
+    await sb().from('cotizaciones').update({
+      estado:       'postulada',
+      postulada_at: new Date().toISOString(),
+      quien_postulo: body.quien_postulo ?? 'asesor',
+    })
     .eq('user_id', user_id)
     .eq('compra_agil_id', compra.id);
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Mark final result
+  if (body.resultado && ['ganada', 'perdida', 'desierta'].includes(body.resultado)) {
+    await sb().from('cotizaciones').update({
+      estado: body.resultado,
+    })
+    .eq('user_id', user_id)
+    .eq('compra_agil_id', compra.id);
+  }
+
   return NextResponse.json({ ok: true });
 }
