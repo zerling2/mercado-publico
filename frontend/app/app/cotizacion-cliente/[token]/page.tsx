@@ -72,7 +72,7 @@ export default function CotizacionClientePage() {
         if (!isNaN(c) && !isNaN(m)) r.precioEdit = String(Math.round(c * (1 + m / 100)));
       }
       // auto-calc margen from costo+precio
-      if ((field === 'costoEdit' || field === 'precioEdit') && r.costoEdit && r.precioEdit && field !== 'margenEdit') {
+      if ((field === 'costoEdit' || field === 'precioEdit') && r.costoEdit && r.precioEdit) {
         const c = parseFloat(r.costoEdit); const p = parseFloat(r.precioEdit);
         if (!isNaN(c) && c > 0 && !isNaN(p)) r.margenEdit = String(Math.round((p / c - 1) * 100 * 10) / 10);
       }
