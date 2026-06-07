@@ -103,7 +103,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
         if (r.costo && r.margen) r.precio = String(calcPrecio(r.costo, r.margen));
       }
       if (field === 'costo' || field === 'precio') {
-        if (r.costo && r.precio && field !== 'margen') {
+        if (r.costo && r.precio) {
           r.margen = String(calcMargen(r.costo, r.precio));
         }
       }
