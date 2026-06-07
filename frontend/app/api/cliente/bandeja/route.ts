@@ -47,15 +47,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ empresa, cotizaciones: [] });
   }
 
-  const compraIds = [...new Set(cotizaciones.map(c => c.compra_agil_id))];
+  type CotRow = { id: string; token: string; estado: string; enviada_at: string; respondida_at: string | null; postulada_at: string | null; notas: string | null; compra_agil_id: string };
+  const rows = cotizaciones as CotRow[];
+
+  const compraIds = [...new Set(rows.map(c => c.compra_agil_id))];
   const { data: compras } = await sb()
     .from('compras_agiles')
     .select('id, codigo, nombre, organismo_nombre, fecha_cierre')
     .in('id', compraIds);
 
-  const compraMap = new Map((compras ?? []).map(c => [c.id, c]));
+  const compraMap = new Map((compras ?? []).map((c: { id: string }) => [c.id, c]));
 
-  const enriched = cotizaciones.map(cot => ({
+  const enriched = rows.map(cot => ({
     ...cot,
     compra: compraMap.get(cot.compra_agil_id) ?? null,
   }));
