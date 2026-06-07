@@ -1,27 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Service key for DB queries (bypasses RLS)
 function sb() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 }
-// Anon key for JWT verification (correct flow)
-function sbAnon() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+function getUserIdFromToken(token: string): string | null {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+    return typeof payload.sub === 'string' ? payload.sub : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function GET(req: NextRequest) {
   const token = req.headers.get('Authorization')?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-  const { data: { user }, error: authErr } = await sbAnon().auth.getUser(token);
-  if (authErr || !user) return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+  const userId = getUserIdFromToken(token);
+  if (!userId) return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
 
-  // Find empresa for this auth user
   const { data: contacto } = await sb()
     .from('usuarios_cliente')
     .select('empresa_id')
-    .eq('auth_user_id', user.id)
+    .eq('auth_user_id', userId)
     .eq('activo', true)
     .maybeSingle();
 
@@ -29,14 +32,12 @@ export async function GET(req: NextRequest) {
 
   const { empresa_id } = contacto;
 
-  // Get empresa info
   const { data: empresa } = await sb()
     .from('users')
     .select('empresa_nombre, rut')
     .eq('id', empresa_id)
     .maybeSingle();
 
-  // Get cotizaciones for this empresa (not borrador)
   const { data: cotizaciones } = await sb()
     .from('cotizaciones')
     .select('id, token, estado, enviada_at, respondida_at, postulada_at, notas, compra_agil_id')
@@ -48,7 +49,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ empresa, cotizaciones: [] });
   }
 
-  // Enrich with compra info
   const compraIds = [...new Set(cotizaciones.map(c => c.compra_agil_id))];
   const { data: compras } = await sb()
     .from('compras_agiles')
