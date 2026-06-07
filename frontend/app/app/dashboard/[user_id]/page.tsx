@@ -160,115 +160,139 @@ interface DetalleCompra {
   estado: string;
   organismo: { nombre: string | null; rut: string | null; region: string | null; comuna: string | null };
   monto: number | null;
-  moneda: string;
   fechas: { publicacion: string; cierre: string; fin_preguntas: string };
   items: Array<{ descripcion: string; cantidad: number | null; unidad: string | null; especificaciones: string | null }>;
   condiciones: { plazo_entrega: string | null; forma_pago: string | null; garantia: string | null; lugar_entrega: string | null };
   contacto: { nombre?: string; email?: string; fono?: string } | null;
+  _fuente?: string;
+  _aviso?: string;
 }
 
 function DetallePanel({ codigo }: { codigo: string }) {
   const [detalle, setDetalle] = useState<DetalleCompra | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [err, setErr] = useState('');
+  const [aviso, setAviso] = useState('');
 
   useEffect(() => {
     fetch(`/api/compras-agiles/${encodeURIComponent(codigo)}`)
       .then(r => r.json())
       .then(d => {
-        if (d.error) setErr(d.error);
-        else setDetalle(d);
+        if (d._aviso) setAviso(d._aviso);
+        setDetalle(d);
         setCargando(false);
       })
-      .catch(e => { setErr(e.message); setCargando(false); });
+      .catch(e => { setAviso(e.message); setCargando(false); });
   }, [codigo]);
 
   if (cargando) return (
-    <div style={{ padding: '16px 0', textAlign: 'center', color: MUTED, fontSize: '0.85rem' }}>
-      Cargando detalle…
-    </div>
-  );
-
-  if (err || !detalle) return (
-    <div style={{ padding: '8px 0', fontSize: '0.8rem', color: MUTED }}>
-      No se pudo cargar el detalle desde la API.
-    </div>
+    <p style={{ color: MUTED, fontSize: '0.82rem', margin: '8px 0' }}>Cargando detalle…</p>
   );
 
   const s = (v: string | null | undefined) => v || '—';
+  const desdeBD = detalle?._fuente === 'base_de_datos';
 
   return (
     <div style={{ fontSize: '0.83rem', lineHeight: 1.6 }}>
-      {/* Organismo */}
-      <Section title="Organismo comprador">
-        <Field label="Entidad" value={s(detalle.organismo.nombre)} bold />
-        <Field label="RUT" value={s(detalle.organismo.rut)} />
-        <Field label="Región" value={s(detalle.organismo.region)} />
-        {detalle.organismo.comuna && <Field label="Comuna" value={detalle.organismo.comuna} />}
-      </Section>
-
-      {/* Descripción */}
-      {detalle.descripcion && (
-        <Section title="Descripción">
-          <p style={{ margin: 0, color: TEXT, lineHeight: 1.55, whiteSpace: 'pre-line' }}>
-            {detalle.descripcion}
-          </p>
-        </Section>
+      {/* Aviso de fuente / error */}
+      {aviso && (
+        <div style={{ background: desdeBD ? '#FEF9C3' : '#FEE2E2', borderRadius: 8,
+          padding: '8px 10px', marginBottom: 12, fontSize: '0.75rem', color: '#92400E' }}>
+          {desdeBD ? '⚠ ' : '✕ '}{aviso}
+        </div>
       )}
 
-      {/* Items solicitados */}
-      {detalle.items.length > 0 && (
-        <Section title={`Ítems solicitados (${detalle.items.length})`}>
-          {detalle.items.map((it, i) => (
-            <div key={i} style={{
-              background: WHITE, borderRadius: 8, padding: '8px 10px',
-              marginBottom: 6, border: `1px solid ${BORDER}`,
-            }}>
-              <p style={{ margin: 0, fontWeight: 600, color: TEXT }}>{it.descripcion}</p>
-              <div style={{ display: 'flex', gap: 12, marginTop: 3, flexWrap: 'wrap' }}>
-                {it.cantidad && <span style={{ color: MUTED }}>Cant: <strong style={{ color: TEXT }}>{it.cantidad} {it.unidad ?? ''}</strong></span>}
-              </div>
-              {it.especificaciones && (
-                <p style={{ margin: '4px 0 0', color: MUTED, fontSize: '0.78rem' }}>{it.especificaciones}</p>
-              )}
-            </div>
-          ))}
-        </Section>
-      )}
+      {detalle && (
+        <>
+          {/* Nombre completo */}
+          <Section title="Solicitud">
+            <p style={{ margin: 0, color: TEXT, fontWeight: 600, lineHeight: 1.4 }}>{detalle.nombre}</p>
+            <Field label="Código" value={detalle.codigo} />
+            <Field label="Estado" value={detalle.estado} />
+          </Section>
 
-      {/* Fechas */}
-      <Section title="Fechas clave">
-        <Field label="Publicación" value={detalle.fechas.publicacion} />
-        <Field label="Cierre oferta" value={detalle.fechas.cierre} bold />
-        {detalle.fechas.fin_preguntas !== '—' && (
-          <Field label="Fin preguntas" value={detalle.fechas.fin_preguntas} />
-        )}
-      </Section>
-
-      {/* Condiciones */}
-      {Object.values(detalle.condiciones).some(Boolean) && (
-        <Section title="Condiciones">
-          {detalle.condiciones.plazo_entrega && <Field label="Plazo entrega" value={detalle.condiciones.plazo_entrega} />}
-          {detalle.condiciones.forma_pago && <Field label="Forma de pago" value={detalle.condiciones.forma_pago} />}
-          {detalle.condiciones.lugar_entrega && <Field label="Lugar entrega" value={detalle.condiciones.lugar_entrega} />}
-          {detalle.condiciones.garantia && <Field label="Garantía" value={detalle.condiciones.garantia} />}
-        </Section>
-      )}
-
-      {/* Contacto */}
-      {detalle.contacto && (detalle.contacto.nombre || detalle.contacto.email) && (
-        <Section title="Contacto">
-          {detalle.contacto.nombre && <Field label="Nombre" value={detalle.contacto.nombre} />}
-          {detalle.contacto.email && (
-            <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
-              <span style={{ color: MUTED, minWidth: 72 }}>Email</span>
-              <a href={`mailto:${detalle.contacto.email}`} style={{ color: BLUE, fontWeight: 500 }}>
-                {detalle.contacto.email}
-              </a>
-            </div>
+          {/* Organismo */}
+          {(detalle.organismo.nombre || detalle.organismo.region) && (
+            <Section title="Organismo comprador">
+              {detalle.organismo.nombre && <Field label="Entidad" value={detalle.organismo.nombre} bold />}
+              {detalle.organismo.rut && <Field label="RUT" value={detalle.organismo.rut} />}
+              {detalle.organismo.region && <Field label="Región" value={detalle.organismo.region} />}
+              {detalle.organismo.comuna && <Field label="Comuna" value={detalle.organismo.comuna} />}
+            </Section>
           )}
-          {detalle.contacto.fono && <Field label="Teléfono" value={detalle.contacto.fono} />}
-        </Section>
+
+          {/* Descripción */}
+          {detalle.descripcion && (
+            <Section title="Descripción">
+              <p style={{ margin: 0, color: TEXT, lineHeight: 1.55, whiteSpace: 'pre-line' }}>
+                {detalle.descripcion}
+              </p>
+            </Section>
+          )}
+
+          {/* Items */}
+          {detalle.items.length > 0 && (
+            <Section title={`Ítems solicitados (${detalle.items.length})`}>
+              {detalle.items.map((it, i) => (
+                <div key={i} style={{ background: WHITE, borderRadius: 8, padding: '8px 10px',
+                  marginBottom: 6, border: `1px solid ${BORDER}` }}>
+                  <p style={{ margin: 0, fontWeight: 600, color: TEXT }}>{it.descripcion}</p>
+                  {it.cantidad && (
+                    <p style={{ margin: '2px 0 0', color: MUTED, fontSize: '0.78rem' }}>
+                      Cantidad: {it.cantidad} {it.unidad ?? ''}
+                    </p>
+                  )}
+                  {it.especificaciones && (
+                    <p style={{ margin: '2px 0 0', color: MUTED, fontSize: '0.78rem' }}>
+                      {it.especificaciones}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </Section>
+          )}
+
+          {/* Fechas */}
+          <Section title="Fechas">
+            {detalle.fechas.publicacion !== '—' && <Field label="Publicación" value={detalle.fechas.publicacion} />}
+            <Field label="Cierre" value={detalle.fechas.cierre} bold />
+            {detalle.fechas.fin_preguntas !== '—' && <Field label="Fin preguntas" value={detalle.fechas.fin_preguntas} />}
+          </Section>
+
+          {/* Monto */}
+          {detalle.monto && (
+            <Section title="Presupuesto">
+              <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: BLUE }}>
+                {pesos(detalle.monto)} CLP
+              </p>
+            </Section>
+          )}
+
+          {/* Condiciones */}
+          {Object.values(detalle.condiciones).some(Boolean) && (
+            <Section title="Condiciones">
+              {detalle.condiciones.plazo_entrega && <Field label="Plazo" value={detalle.condiciones.plazo_entrega} />}
+              {detalle.condiciones.forma_pago && <Field label="Pago" value={detalle.condiciones.forma_pago} />}
+              {detalle.condiciones.lugar_entrega && <Field label="Entrega" value={detalle.condiciones.lugar_entrega} />}
+              {detalle.condiciones.garantia && <Field label="Garantía" value={detalle.condiciones.garantia} />}
+            </Section>
+          )}
+
+          {/* Contacto */}
+          {detalle.contacto && (detalle.contacto.nombre || detalle.contacto.email) && (
+            <Section title="Contacto">
+              {detalle.contacto.nombre && <Field label="Nombre" value={detalle.contacto.nombre} />}
+              {detalle.contacto.email && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
+                  <span style={{ color: MUTED, minWidth: 72 }}>Email</span>
+                  <a href={`mailto:${detalle.contacto.email}`} style={{ color: BLUE, fontWeight: 500 }}>
+                    {detalle.contacto.email}
+                  </a>
+                </div>
+              )}
+              {detalle.contacto.fono && <Field label="Fono" value={detalle.contacto.fono} />}
+            </Section>
+          )}
+        </>
       )}
     </div>
   );
@@ -373,24 +397,16 @@ function OportunidadCard({ o }: { o: Oportunidad }) {
       {/* Expanded detail panel */}
       {expandido && (
         <div style={{ borderTop: `1px solid ${BORDER}`, padding: '14px 16px 16px', background: BG }}>
-          {/* Action buttons at top */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          {/* Action button */}
+          <div style={{ marginBottom: 16 }}>
             <Link
               href={`/dashboard/compra/${encodeURIComponent(c.codigo)}`}
               style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center',
-                height: 40, textDecoration: 'none', fontSize: '0.85rem' }}
+                height: 44, textDecoration: 'none', fontSize: '0.9rem', width: '100%',
+                justifyContent: 'center' }}
             >
               Generar propuesta →
             </Link>
-            <a
-              href={portalUrl(c.codigo)}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ ...btnSecondary, display: 'inline-flex', alignItems: 'center',
-                height: 40, textDecoration: 'none', fontSize: '0.85rem' }}
-            >
-              Portal ↗
-            </a>
           </div>
 
           {/* Full detail from MP API */}
