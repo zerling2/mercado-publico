@@ -510,7 +510,7 @@ function OportunidadesTab({
   const [oportunidades, setOportunidades] = useState<Oportunidad[]>([]);
   const [loading, setLoading] = useState(true);
   const [calculando, setCalculando] = useState(false);
-  const [analizando, setAnalizando] = useState(false);
+
   const [msg, setMsg] = useState('');
   const [filtro, setFiltro] = useState<'todas' | 'alta' | 'urgente' | 'novistas'>('todas');
 
@@ -547,23 +547,6 @@ function OportunidadesTab({
     }
   };
 
-  const analizarIA = async () => {
-    setAnalizando(true);
-    setMsg('');
-    const res = await fetch(`/api/clientes/${userId}/matching`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limite: 20 }),
-    });
-    const json = await res.json();
-    setAnalizando(false);
-    if (json.error) {
-      setMsg(`Error: ${json.error}`);
-    } else {
-      setMsg(`IA analizó ${json.procesadas} compras, actualizó ${json.actualizadas}`);
-      cargar();
-    }
-  };
 
   const marcarVisto = (relevanciaId: string) => {
     setOportunidades(prev =>
@@ -587,19 +570,9 @@ function OportunidadesTab({
     <div style={{ padding: '16px' }}>
       {/* Actions row */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <button style={{ ...btnPrimary, flex: 1, fontSize: '0.82rem' }}
-          onClick={calcular} disabled={calculando || analizando}>
-          {calculando ? 'Buscando…' : '↻ Buscar'}
-        </button>
-        <button
-          onClick={analizarIA}
-          disabled={calculando || analizando || oportunidades.length === 0}
-          style={{
-            ...btnSecondary, flex: 1, fontSize: '0.82rem',
-            opacity: oportunidades.length === 0 ? 0.5 : 1,
-          }}
-        >
-          {analizando ? 'Analizando…' : '🤖 Análisis IA'}
+        <button style={{ ...btnPrimary, flex: 1, fontSize: '0.85rem' }}
+          onClick={calcular} disabled={calculando}>
+          {calculando ? 'Buscando…' : '↻ Buscar oportunidades'}
         </button>
       </div>
 

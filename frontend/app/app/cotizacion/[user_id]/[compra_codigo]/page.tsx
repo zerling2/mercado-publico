@@ -159,7 +159,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cotizacion_descargada: true }),
     });
-    window.print();
+    window.location.href = `/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}/pdf`;
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
