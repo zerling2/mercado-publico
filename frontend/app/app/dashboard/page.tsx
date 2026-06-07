@@ -6,11 +6,9 @@ import { useRouter } from 'next/navigation';
 const NAVY  = '#001A4D';
 const BLUE  = '#0047CC';
 const WHITE = '#FFFFFF';
-const BG    = '#F0F4FF';
 const TEXT  = '#0A0F1E';
 const MUTED = '#5A6480';
 const BORDER= '#D6E0F5';
-const GREEN = '#027A48';
 const RED   = '#C01048';
 
 interface Usuario {
@@ -36,7 +34,6 @@ export default function EntradaPage() {
     fetch('/api/usuarios').then(r => r.json()).then(d => setTodos(Array.isArray(d) ? d : []));
   }, []);
 
-  // Search as user types
   useEffect(() => {
     const q = query.trim().replace(/[.\-]/g, '');
     if (q.length < 3) { setResultado(null); return; }
@@ -58,7 +55,7 @@ export default function EntradaPage() {
     const json = await res.json();
     setSaving(false);
     if (json.error) { setError(json.error); return; }
-    router.push(`/app/dashboard/${json.id}`);
+    router.push(`/app/seleccion/${json.id}`);
   };
 
   const found = resultado !== null && resultado !== 'notfound' ? resultado : null;
@@ -114,7 +111,6 @@ export default function EntradaPage() {
             }}
           />
 
-          {/* Result */}
           {found && (
             <div style={{ marginTop: 14 }}>
               <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 14,
@@ -146,7 +142,7 @@ export default function EntradaPage() {
                   )}
                 </div>
                 <button
-                  onClick={() => router.push(`/app/dashboard/${found.id}`)}
+                  onClick={() => router.push(`/app/seleccion/${found.id}`)}
                   style={{
                     flexShrink: 0, height: 40, borderRadius: 10, border: 'none',
                     background: BLUE, color: WHITE, fontSize: '0.85rem', fontWeight: 700,
@@ -176,7 +172,6 @@ export default function EntradaPage() {
           )}
         </div>
 
-        {/* Registration form */}
         {showReg && (
           <div style={{ background: WHITE, borderRadius: 20, border: `1px solid ${BORDER}`,
             padding: '20px', marginTop: 12 }}>
@@ -222,7 +217,6 @@ export default function EntradaPage() {
           </div>
         )}
 
-        {/* Recent / all */}
         {!query && todos.length > 0 && (
           <div style={{ marginTop: 20 }}>
             <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.7rem',
@@ -232,7 +226,7 @@ export default function EntradaPage() {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {todos.slice(0, 6).map(u => (
-                <button key={u.id} onClick={() => router.push(`/app/dashboard/${u.id}`)}
+                <button key={u.id} onClick={() => router.push(`/app/seleccion/${u.id}`)}
                   style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 12,
                     border: '1px solid rgba(255,255,255,0.08)', padding: '11px 14px',
                     cursor: 'pointer', textAlign: 'left', display: 'flex',
