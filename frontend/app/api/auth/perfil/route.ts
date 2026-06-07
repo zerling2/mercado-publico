@@ -4,12 +4,15 @@ import { createClient } from '@supabase/supabase-js';
 function sb() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 }
+function sbAnon() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+}
 
 export async function GET(req: NextRequest) {
   const token = req.headers.get('Authorization')?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-  const { data: { user }, error } = await sb().auth.getUser(token);
+  const { data: { user }, error } = await sbAnon().auth.getUser(token);
   if (error || !user) return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
 
   // Check if this auth user is a client contact
