@@ -31,8 +31,18 @@ export default function ClienteLoginPage() {
       setLoading(false);
       return;
     }
-    localStorage.setItem('cliente_token', data.session.access_token);
-    router.push('/app/cliente/bandeja');
+    const token = data.session.access_token;
+    const perfil = await fetch('/api/auth/perfil', {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => r.json());
+
+    if (perfil.role === 'cliente') {
+      localStorage.setItem('cliente_token', token);
+      router.push('/app/cliente/bandeja');
+    } else {
+      localStorage.setItem('asesor_token', token);
+      router.push('/app/dashboard');
+    }
   };
 
   return (

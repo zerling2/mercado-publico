@@ -115,6 +115,12 @@ export default function ClienteBandejaPage() {
     fetch('/api/cliente/bandeja', { headers: { Authorization: `Bearer ${token}` } })
       .then(async r => {
         if (r.status === 401) { localStorage.removeItem('cliente_token'); router.replace('/app/cliente/login'); return; }
+        if (r.status === 403) {
+          // Token belongs to an asesor — redirect to asesor dashboard
+          localStorage.removeItem('cliente_token');
+          router.replace('/app/dashboard');
+          return;
+        }
         const d = await r.json();
         if (d.error) { setError(d.error); } else { setData(d); }
         setLoading(false);
