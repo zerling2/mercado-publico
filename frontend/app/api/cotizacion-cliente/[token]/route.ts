@@ -10,16 +10,16 @@ export async function GET(_req: NextRequest, { params }: { params: { token: stri
 
   const { data: cot } = await sb()
     .from('cotizaciones')
-    .select('id, user_id, compra_agil_id, estado, notas, enviada_at')
+    .select('id, user_id, compra_agil_id, estado, notas, enviada_at, respondida_at, respuesta_cliente, comentario_rechazo')
     .eq('token', token)
     .maybeSingle();
 
   if (!cot) return NextResponse.json({ error: 'Cotización no encontrada' }, { status: 404 });
 
-  // Auto-mark as 'vista' the first time the client opens it
+  // Mark as vista on first open
   if (cot.estado === 'enviada') {
     await sb().from('cotizaciones').update({
-      estado: 'vista',
+      estado:   'vista',
       vista_at: new Date().toISOString(),
     }).eq('id', cot.id);
     cot.estado = 'vista';
@@ -33,7 +33,7 @@ export async function GET(_req: NextRequest, { params }: { params: { token: stri
       .select('empresa_nombre, rut')
       .eq('id', cot.user_id).maybeSingle(),
     sb().from('cotizacion_items')
-      .select('id, nombre, descripcion, cantidad, unidad_medida, costo, margen, precio, costo_cliente, margen_cliente, precio_cliente, requiere_cliente')
+      .select('id, nombre, descripcion, cantidad, unidad_medida, costo, margen, precio, requiere_cliente, costo_cliente, margen_cliente, precio_cliente')
       .eq('user_id', cot.user_id)
       .eq('compra_agil_id', cot.compra_agil_id)
       .order('created_at'),
@@ -48,20 +48,28 @@ export async function PATCH(req: NextRequest, { params }: { params: { token: str
 
   const { data: cot } = await sb()
     .from('cotizaciones')
-    .select('id, user_id, compra_agil_id')
+    .select('id, user_id, compra_agil_id, estado')
     .eq('token', token)
     .maybeSingle();
 
   if (!cot) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
 
-  // Save client's item prices to _cliente columns
-  const items = body.items as Array<{ id: string; costo?: number | null; margen?: number | null; precio?: number | null }> | undefined;
+  // Prevent double-response
+  if (['aprobada', 'rechazada'].includes(cot.estado)) {
+    return NextResponse.json({ error: 'Ya respondida' }, { status: 409 });
+  }
+
+  // Save _cliente columns for items where requiere_cliente=true
+  const { items } = body as {
+    items?: Array<{ id: string; costo_cliente?: number; margen_cliente?: number; precio_cliente?: number }>;
+  };
+
   if (items?.length) {
     for (const it of items) {
       await sb().from('cotizacion_items').update({
-        costo_cliente:  it.costo  ?? null,
-        margen_cliente: it.margen ?? null,
-        precio_cliente: it.precio ?? null,
+        costo_cliente:  it.costo_cliente  ?? null,
+        margen_cliente: it.margen_cliente ?? null,
+        precio_cliente: it.precio_cliente ?? null,
         updated_at: new Date().toISOString(),
       }).eq('id', it.id);
     }
@@ -69,19 +77,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { token: str
 
   const now = new Date().toISOString();
 
-  // aprobar (también acepta legacy completar:true)
   if (body.aprobar || body.completar) {
     await sb().from('cotizaciones').update({
-      estado: 'aprobada',
+      estado:            'aprobada',
       respuesta_cliente: 'aprobada',
-      respondida_at: now,
+      respondida_at:     now,
     }).eq('id', cot.id);
   } else if (body.rechazar) {
     await sb().from('cotizaciones').update({
-      estado: 'rechazada',
-      respuesta_cliente: 'rechazada',
+      estado:             'rechazada',
+      respuesta_cliente:  'rechazada',
       comentario_rechazo: body.comentario ?? null,
-      respondida_at: now,
+      respondida_at:      now,
     }).eq('id', cot.id);
   }
 

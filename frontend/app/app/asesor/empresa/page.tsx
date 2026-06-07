@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 
 const NAVY  = '#001A4D';
 const BLUE  = '#0047CC';
@@ -18,8 +17,8 @@ interface Usuario {
 
 export default function EmpresaCarteraPage() {
   const router = useRouter();
-  const [todos,   setTodos]   = useState<Usuario[]>([]);
-  const [query,   setQuery]   = useState('');
+  const [todos, setTodos]     = useState<Usuario[]>([]);
+  const [query, setQuery]     = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -87,14 +86,11 @@ export default function EmpresaCarteraPage() {
                 border: '1px solid rgba(255,255,255,0.09)',
                 overflow: 'hidden',
               }}>
-                {/* Main row — click to select */}
-                <button
-                  onClick={() => router.push(`/app/seleccion/${u.id}`)}
-                  style={{
-                    width: '100%', background: 'none', border: 'none',
+                {/* Main clickable area */}
+                <button onClick={() => router.push(`/app/seleccion/${u.id}`)}
+                  style={{ width: '100%', background: 'none', border: 'none',
                     padding: '13px 16px', cursor: 'pointer', textAlign: 'left',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  }}>
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ margin: 0, color: WHITE, fontWeight: 700, fontSize: '0.9rem',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -111,7 +107,7 @@ export default function EmpresaCarteraPage() {
                             fontSize: '0.67rem', fontWeight: 600, padding: '2px 7px', borderRadius: 99,
                           }}>{r}</span>
                         ))}
-                        {u.rubros_json.length > 4 && (
+                        {(u.rubros_json.length > 4) && (
                           <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.67rem' }}>
                             +{u.rubros_json.length - 4}
                           </span>
@@ -126,14 +122,15 @@ export default function EmpresaCarteraPage() {
                   <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: '1rem', flexShrink: 0, paddingLeft: 8 }}>›</span>
                 </button>
 
-                {/* Footer row — contactos link */}
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)',
+                {/* Footer: contactos link */}
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)',
                   padding: '7px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-                  <Link href={`/app/empresa/${u.id}/contactos`}
-                    style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.72rem',
-                      textDecoration: 'none', fontWeight: 600 }}>
+                  <button onClick={() => router.push(`/app/empresa/${u.id}/contactos`)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'rgba(100,160,255,0.8)', fontSize: '0.72rem', fontWeight: 600,
+                      padding: 0, fontFamily: 'inherit' }}>
                     Acceso cliente →
-                  </Link>
+                  </button>
                 </div>
               </div>
             ))}

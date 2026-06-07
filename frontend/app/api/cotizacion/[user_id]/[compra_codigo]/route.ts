@@ -122,7 +122,7 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
 
   const { data: cot } = await sb()
     .from('cotizaciones')
-    .select('notas, estado, respuesta_cliente, comentario_rechazo, respondida_at, postulada_at, quien_postulo')
+    .select('id, notas, estado, respuesta_cliente, comentario_rechazo, respondida_at, postulada_at, quien_postulo, token')
     .eq('user_id', user_id)
     .eq('compra_agil_id', compra.id)
     .maybeSingle();
@@ -161,12 +161,14 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
     relevancia:    rel ?? null,
     notas_cliente: cot?.notas ?? '',
     cotizacion: cot ? {
-      estado:             cot.estado,
-      respuesta_cliente:  cot.respuesta_cliente,
+      id:                cot.id,
+      estado:            cot.estado,
+      respuesta_cliente: cot.respuesta_cliente,
       comentario_rechazo: cot.comentario_rechazo,
-      respondida_at:      cot.respondida_at,
-      postulada_at:       cot.postulada_at,
-      quien_postulo:      cot.quien_postulo,
+      respondida_at:     cot.respondida_at,
+      postulada_at:      cot.postulada_at,
+      quien_postulo:     cot.quien_postulo,
+      token:             cot.token,
     } : null,
   });
 }
@@ -183,7 +185,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
 
   if (!compra) return NextResponse.json({ error: 'Compra no encontrada' }, { status: 404 });
 
-  // relevancia_compras fields
+  // Update relevancia_compras (comentario interno, visto, etc.)
   const relUpdates: Record<string, unknown> = {};
   if ('comentario'            in body) relUpdates.comentario            = body.comentario;
   if ('cotizacion_descargada' in body) relUpdates.cotizacion_descargada = body.cotizacion_descargada;
@@ -191,58 +193,43 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
     relUpdates.visto = body.visto;
     if (body.visto) relUpdates.fecha_visto = new Date().toISOString();
   }
+
   if (Object.keys(relUpdates).length > 0) {
-    const { error } = await sb()
+    await sb()
       .from('relevancia_compras')
       .update(relUpdates)
       .eq('user_id', user_id)
       .eq('compra_agil_id', compra.id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // cotizaciones.notas (client-facing)
+  // Update cotizaciones.notas (client-facing notes)
   if ('notas_cliente' in body) {
-    const { data: existing } = await sb()
-      .from('cotizaciones')
-      .select('id')
-      .eq('user_id', user_id)
-      .eq('compra_agil_id', compra.id)
-      .maybeSingle();
-    if (existing) {
-      await sb().from('cotizaciones').update({ notas: body.notas_cliente }).eq('id', existing.id);
-    } else {
-      await sb().from('cotizaciones').insert({ user_id, compra_agil_id: compra.id, notas: body.notas_cliente });
-    }
+    await sb().from('cotizaciones').upsert({
+      user_id,
+      compra_agil_id: compra.id,
+      notas: body.notas_cliente ?? null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,compra_agil_id', ignoreDuplicates: false });
   }
 
-  // Lifecycle state transitions
-  const cotEstado: Record<string, unknown> = {};
-  const now = new Date().toISOString();
-
+  // Mark as postulada (submitted to portal)
   if (body.postulada) {
-    cotEstado.estado       = 'postulada';
-    cotEstado.postulada_at = now;
-    if (body.quien_postulo) cotEstado.quien_postulo = body.quien_postulo;
-  } else if (body.resultado) {
-    const allowed = ['ganada', 'perdida', 'desierta'];
-    if (allowed.includes(body.resultado)) {
-      cotEstado.estado      = body.resultado;
-      cotEstado.resuelta_at = now;
-      cotEstado.cerrado_por = body.asesor_id ?? null;
-    }
+    await sb().from('cotizaciones').update({
+      estado:       'postulada',
+      postulada_at: new Date().toISOString(),
+      quien_postulo: body.quien_postulo ?? 'asesor',
+    })
+    .eq('user_id', user_id)
+    .eq('compra_agil_id', compra.id);
   }
 
-  if (Object.keys(cotEstado).length > 0) {
-    const { data: cot } = await sb()
-      .from('cotizaciones')
-      .select('id')
-      .eq('user_id', user_id)
-      .eq('compra_agil_id', compra.id)
-      .maybeSingle();
-    if (cot) {
-      const { error } = await sb().from('cotizaciones').update(cotEstado).eq('id', cot.id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+  // Mark final result
+  if (body.resultado && ['ganada', 'perdida', 'desierta'].includes(body.resultado)) {
+    await sb().from('cotizaciones').update({
+      estado: body.resultado,
+    })
+    .eq('user_id', user_id)
+    .eq('compra_agil_id', compra.id);
   }
 
   return NextResponse.json({ ok: true });

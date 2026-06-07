@@ -18,16 +18,19 @@ interface CalcRow extends ItemBase {
   saved_id?: string; expandDesc: boolean;
 }
 interface CotizacionEstado {
+  id: string;
   estado: string;
   respuesta_cliente: string | null;
   comentario_rechazo: string | null;
   respondida_at: string | null;
   postulada_at: string | null;
   quien_postulo: string | null;
+  token: string | null;
 }
 
 const BLUE = '#003DA5'; const BLUE_D = '#00297A';
 const GREEN = '#059669'; const AMBER = '#B45309';
+const RED = '#DC2626';
 const TEXT = '#111827'; const MUTED = '#6B7280';
 const BORDER = '#E5E7EB'; const BG = '#F9FAFB'; const WHITE = '#FFFFFF';
 
@@ -51,19 +54,18 @@ function calcMargen(costo: string, precio: string) {
 export default function CotizacionPage({ params }: { params: { user_id: string; compra_codigo: string } }) {
   const { user_id, compra_codigo } = params;
 
-  const [compra, setCompra]   = useState<CompraInfo | null>(null);
-  const [rows,   setRows]     = useState<CalcRow[]>([]);
-  const [cotizacion, setCotizacion] = useState<CotizacionEstado | null>(null);
+  const [compra, setCompra]               = useState<CompraInfo | null>(null);
+  const [rows, setRows]                   = useState<CalcRow[]>([]);
   const [notasInternas, setNotasInternas] = useState('');
-  const [notasCliente,  setNotasCliente]  = useState('');
-  const [loading,  setLoading]  = useState(true);
-  const [loadMsg,  setLoadMsg]  = useState('Descargando productos del portal…');
-  const [error,    setError]    = useState('');
-  const [saving,   setSaving]   = useState(false);
-  const [savedMsg, setSavedMsg] = useState('');
-  const [sendToken, setSendToken] = useState('');
-  const [copied,   setCopied]   = useState(false);
-  const [infoExpanded, setInfoExpanded] = useState(false);
+  const [notasCliente, setNotasCliente]   = useState('');
+  const [cotizacion, setCotizacion]       = useState<CotizacionEstado | null>(null);
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState('');
+  const [saving, setSaving]               = useState(false);
+  const [savedMsg, setSavedMsg]           = useState('');
+  const [sendToken, setSendToken]         = useState('');
+  const [copied, setCopied]               = useState(false);
+  const [infoExpanded, setInfoExpanded]   = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -76,6 +78,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       setNotasInternas(base.relevancia?.comentario ?? '');
       setNotasCliente(base.notas_cliente ?? '');
       setCotizacion(base.cotizacion ?? null);
+      if (base.cotizacion?.token) setSendToken(base.cotizacion.token);
       const savedMap = new Map((Array.isArray(saved) ? saved : []).map(
         (s: { compra_producto_id: string; id: string; costo: number | null; margen: number | null; precio: number | null }) =>
           [s.compra_producto_id, s]
@@ -131,31 +134,21 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       }),
     ]);
     setSaving(false); setSavedMsg('Guardado ✓');
+    setTimeout(() => setSavedMsg(''), 2000);
   }, [rows, notasInternas, notasCliente, user_id, compra_codigo]);
 
   const enviarCliente = async () => {
     await guardar();
     const res = await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}/enviar`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notas: notasCliente }),
+      body: JSON.stringify({}),
     }).then(r => r.json());
-    if (res.token) setSendToken(res.token);
-  };
-
-  const marcarPostulada = async (quien: 'asesor' | 'cliente') => {
-    await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ postulada: true, quien_postulo: quien }),
-    });
-    setCotizacion(prev => prev ? { ...prev, estado: 'postulada', postulada_at: new Date().toISOString(), quien_postulo: quien } : prev);
-  };
-
-  const marcarResultado = async (resultado: 'ganada' | 'perdida' | 'desierta') => {
-    await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resultado }),
-    });
-    setCotizacion(prev => prev ? { ...prev, estado: resultado } : prev);
+    if (res.token) {
+      setSendToken(res.token);
+      // Reload to get cotizacion state
+      const base = await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`).then(r => r.json());
+      setCotizacion(base.cotizacion ?? null);
+    }
   };
 
   const copyLink = async () => {
@@ -171,6 +164,24 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
     window.location.href = `/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}/pdf`;
   };
 
+  const marcarPostulada = async (quien: 'asesor' | 'cliente') => {
+    await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postulada: true, quien_postulo: quien }),
+    });
+    const base = await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`).then(r => r.json());
+    setCotizacion(base.cotizacion ?? null);
+  };
+
+  const marcarResultado = async (resultado: 'ganada' | 'perdida' | 'desierta') => {
+    await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resultado }),
+    });
+    const base = await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`).then(r => r.json());
+    setCotizacion(base.cotizacion ?? null);
+  };
+
   const calcRows = rows.map(r => {
     const p = r.precio ? parseFloat(r.precio) : (r.costo && r.margen ? calcPrecio(r.costo, r.margen) : 0);
     const c = r.costo ? parseFloat(r.costo) : 0;
@@ -181,8 +192,11 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
   const iva          = Math.round(subtotal * 0.19);
   const total        = subtotal + iva;
   const margenGlobal = totalCosto > 0 ? Math.round((subtotal / totalCosto - 1) * 100) : null;
-  const llenados     = calcRows.filter(r => r.precioFinal > 0).length;
+  const llenados      = calcRows.filter(r => r.precioFinal > 0).length;
   const todosPreciados = rows.length > 0 && llenados === rows.length;
+
+  const estado = cotizacion?.estado;
+  const isFinal = ['ganada', 'perdida', 'desierta'].includes(estado ?? '');
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column',
@@ -191,26 +205,23 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       <div style={{ width: 26, height: 26, borderRadius: '50%',
         border: `3px solid ${BORDER}`, borderTopColor: BLUE,
         animation: 'spin 0.8s linear infinite' }} />
-      <p style={{ margin: 0, fontSize: '0.83rem' }}>{loadMsg}</p>
+      <p style={{ margin: 0, fontSize: '0.83rem' }}>Cargando…</p>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
   if (error || !compra) return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center',
-      justifyContent: 'center', fontFamily: '-apple-system, sans-serif', color: '#DC2626',
+      justifyContent: 'center', fontFamily: '-apple-system, sans-serif', color: RED,
       flexDirection: 'column', gap: 12 }}>
       <p>{error || 'No encontrada'}</p>
       <Link href={`/app/dashboard/${user_id}`} style={{ color: BLUE }}>← Volver</Link>
     </div>
   );
 
-  const cot = cotizacion;
-  const cotEstado = cot?.estado;
-
   return (
     <div style={{ minHeight: '100vh', background: BG,
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif',
-      color: TEXT, maxWidth: 640, margin: '0 auto', paddingBottom: 96 }}>
+      color: TEXT, maxWidth: 640, margin: '0 auto', paddingBottom: isFinal ? 24 : 96 }}>
 
       {/* Sticky header */}
       <header style={{ background: `linear-gradient(135deg,${BLUE_D} 0%,${BLUE} 100%)`,
@@ -243,79 +254,84 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
 
       <div style={{ padding: '12px 14px' }}>
 
-        {/* Client response banner */}
-        {cotEstado === 'aprobada' && (
+        {/* STATUS BANNERS */}
+        {estado === 'aprobada' && (
           <div style={{ background: '#ECFDF5', border: `1.5px solid #6EE7B7`, borderRadius: 12,
             padding: '12px 14px', marginBottom: 12 }}>
-            <p style={{ margin: '0 0 2px', fontWeight: 700, color: '#065F46', fontSize: '0.85rem' }}>
-              ✓ Cliente aprobó la cotización
+            <p style={{ margin: '0 0 4px', fontWeight: 700, color: '#065F46', fontSize: '0.88rem' }}>
+              Cliente aprobó la cotización
             </p>
-            <p style={{ margin: '0 0 10px', color: '#047857', fontSize: '0.75rem' }}>
-              {cot?.respondida_at ? `El ${fechaCorta(cot.respondida_at)}` : ''} — lista para postular
+            <p style={{ margin: '0 0 10px', color: '#047857', fontSize: '0.78rem' }}>
+              Respondida {fechaCorta(cotizacion?.respondida_at ?? null)}. ¿Quién sube al portal?
             </p>
-            {!cot?.postulada_at && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => marcarPostulada('asesor')}
-                  style={{ height: 34, borderRadius: 8, border: 'none', cursor: 'pointer',
-                    background: GREEN, color: WHITE, fontFamily: 'inherit',
-                    fontSize: '0.78rem', fontWeight: 700, padding: '0 14px' }}>
-                  Postuló el asesor
-                </button>
-                <button onClick={() => marcarPostulada('cliente')}
-                  style={{ height: 34, borderRadius: 8, border: `1.5px solid ${GREEN}`,
-                    cursor: 'pointer', background: WHITE, color: GREEN,
-                    fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700, padding: '0 14px' }}>
-                  Postuló el cliente
-                </button>
-              </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => marcarPostulada('asesor')}
+                style={{ flex: 1, height: 36, borderRadius: 8, border: 'none', cursor: 'pointer',
+                  background: GREEN, color: WHITE, fontFamily: 'inherit',
+                  fontSize: '0.82rem', fontWeight: 700 }}>
+                Subir yo (asesor)
+              </button>
+              <button onClick={() => marcarPostulada('cliente')}
+                style={{ flex: 1, height: 36, borderRadius: 8, border: `1.5px solid ${GREEN}`, cursor: 'pointer',
+                  background: WHITE, color: GREEN, fontFamily: 'inherit',
+                  fontSize: '0.82rem', fontWeight: 700 }}>
+                El cliente lo sube
+              </button>
+            </div>
+          </div>
+        )}
+
+        {estado === 'rechazada' && (
+          <div style={{ background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 12,
+            padding: '12px 14px', marginBottom: 12 }}>
+            <p style={{ margin: '0 0 3px', fontWeight: 700, color: RED, fontSize: '0.88rem' }}>
+              Cliente rechazó la cotización
+            </p>
+            <p style={{ margin: '0 0 2px', color: '#B91C1C', fontSize: '0.78rem' }}>
+              Respondida {fechaCorta(cotizacion?.respondida_at ?? null)}
+            </p>
+            {cotizacion?.comentario_rechazo && (
+              <p style={{ margin: '6px 0 0', color: '#7F1D1D', fontSize: '0.82rem',
+                fontStyle: 'italic', borderTop: `1px solid #FCA5A5`, paddingTop: 6 }}>
+                "{cotizacion.comentario_rechazo}"
+              </p>
             )}
           </div>
         )}
 
-        {cotEstado === 'rechazada' && (
-          <div style={{ background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 12,
-            padding: '12px 14px', marginBottom: 12 }}>
-            <p style={{ margin: '0 0 2px', fontWeight: 700, color: '#DC2626', fontSize: '0.85rem' }}>
-              ✗ Cliente rechazó la cotización
-            </p>
-            <p style={{ margin: 0, color: '#B91C1C', fontSize: '0.75rem' }}>
-              {cot?.respondida_at ? `El ${fechaCorta(cot.respondida_at)}` : ''}
-              {cot?.comentario_rechazo ? ` — "${cot.comentario_rechazo}"` : ''}
-            </p>
-          </div>
-        )}
-
-        {cotEstado === 'postulada' && (
+        {estado === 'postulada' && (
           <div style={{ background: '#EFF6FF', border: `1.5px solid #93C5FD`, borderRadius: 12,
             padding: '12px 14px', marginBottom: 12 }}>
-            <p style={{ margin: '0 0 2px', fontWeight: 700, color: BLUE, fontSize: '0.85rem' }}>
-              Postulada el {fechaCorta(cot?.postulada_at ?? null)}
-              {cot?.quien_postulo ? ` · por el ${cot.quien_postulo}` : ''}
+            <p style={{ margin: '0 0 4px', fontWeight: 700, color: BLUE, fontSize: '0.88rem' }}>
+              Postulada al portal — {cotizacion?.quien_postulo === 'cliente' ? 'subió el cliente' : 'subió el asesor'}
             </p>
-            <p style={{ margin: '0 0 10px', color: '#1D4ED8', fontSize: '0.75rem' }}>¿Cuál fue el resultado?</p>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <p style={{ margin: '0 0 10px', color: '#1D4ED8', fontSize: '0.78rem' }}>
+              {fechaCorta(cotizacion?.postulada_at ?? null)} · ¿Cuál fue el resultado?
+            </p>
+            <div style={{ display: 'flex', gap: 6 }}>
               {(['ganada', 'perdida', 'desierta'] as const).map(r => (
                 <button key={r} onClick={() => marcarResultado(r)}
-                  style={{ height: 32, borderRadius: 8, border: `1.5px solid ${BORDER}`,
-                    cursor: 'pointer', background: WHITE, color: TEXT,
-                    fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 600,
-                    padding: '0 12px', textTransform: 'capitalize' }}>
-                  {r === 'ganada' ? '🏆 Ganada' : r === 'perdida' ? 'Perdida' : 'Desierta'}
+                  style={{ flex: 1, height: 34, borderRadius: 8,
+                    border: `1.5px solid ${r === 'ganada' ? GREEN : r === 'perdida' ? RED : AMBER}`,
+                    background: WHITE, cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: '0.78rem', fontWeight: 700,
+                    color: r === 'ganada' ? GREEN : r === 'perdida' ? RED : AMBER }}>
+                  {r.charAt(0).toUpperCase() + r.slice(1)}
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {(cotEstado === 'ganada' || cotEstado === 'perdida' || cotEstado === 'desierta') && (
+        {isFinal && (
           <div style={{
-            background: cotEstado === 'ganada' ? '#ECFDF5' : '#F3F4F6',
-            border: `1.5px solid ${cotEstado === 'ganada' ? '#6EE7B7' : BORDER}`,
+            background: estado === 'ganada' ? '#ECFDF5' : estado === 'perdida' ? '#FEF2F2' : '#FFFBEB',
+            border: `1.5px solid ${estado === 'ganada' ? '#6EE7B7' : estado === 'perdida' ? '#FCA5A5' : '#FCD34D'}`,
             borderRadius: 12, padding: '12px 14px', marginBottom: 12,
           }}>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: '0.85rem',
-              color: cotEstado === 'ganada' ? '#065F46' : MUTED }}>
-              {cotEstado === 'ganada' ? '🏆 Licitación ganada' : cotEstado === 'perdida' ? 'Licitación perdida' : 'Licitación desierta'}
+            <p style={{ margin: 0, fontWeight: 800, fontSize: '1.1rem',
+              color: estado === 'ganada' ? GREEN : estado === 'perdida' ? RED : AMBER }}>
+              {estado === 'ganada' ? 'Ganada' : estado === 'perdida' ? 'Perdida' : 'Desierta'}
             </p>
           </div>
         )}
@@ -329,7 +345,9 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
               justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <div>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: TEXT }}>{compra.organismo}</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: TEXT }}>
+                  {compra.organismo}
+                </span>
                 <div style={{ display: 'flex', gap: 10, marginTop: 2, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '0.72rem', color: MUTED }}>Cierre {fechaCorta(compra.fecha_cierre)}</span>
                   {compra.monto_referencial && (
@@ -363,8 +381,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
               <span>{Math.round(llenados / rows.length * 100)}%</span>
             </div>
             <div style={{ height: 4, background: BORDER, borderRadius: 99, overflow: 'hidden' }}>
-              <div style={{ height: '100%', borderRadius: 99,
-                background: llenados === rows.length ? GREEN : BLUE,
+              <div style={{ height: '100%', borderRadius: 99, background: llenados === rows.length ? GREEN : BLUE,
                 width: `${Math.round(llenados / rows.length * 100)}%`, transition: 'width 0.3s' }} />
             </div>
           </div>
@@ -381,9 +398,13 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
             {calcRows.map((r, idx) => {
               const precioAuto = !!(r.costo && r.margen && !rows[idx].precio);
               const descLarga  = (r.descripcion ?? '').length > 60;
+
               return (
-                <div key={r.id} style={{ background: WHITE, borderRadius: 12,
-                  border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
+                <div key={r.id} style={{
+                  background: WHITE, borderRadius: 12,
+                  border: `1px solid ${BORDER}`,
+                  overflow: 'hidden',
+                }}>
                   <div style={{ padding: '11px 14px 8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between',
                       alignItems: 'flex-start', gap: 8 }}>
@@ -398,7 +419,9 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
                               display: rows[idx].expandDesc ? 'block' : '-webkit-box',
                               WebkitLineClamp: rows[idx].expandDesc ? undefined : 2,
                               WebkitBoxOrient: 'vertical' as const,
-                            }}>{r.descripcion}</p>
+                            }}>
+                              {r.descripcion}
+                            </p>
                             {descLarga && (
                               <button onClick={() => updateRow(idx, 'expandDesc', !rows[idx].expandDesc)}
                                 style={{ background: 'none', border: 'none', cursor: 'pointer',
@@ -420,19 +443,23 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
                       </div>
                     </div>
                   </div>
+
                   <div style={{ padding: '0 14px 11px',
-                    display: 'grid', gridTemplateColumns: '1fr 80px 1fr', gap: 7, alignItems: 'center' }}>
+                    display: 'grid', gridTemplateColumns: '1fr 80px 1fr',
+                    gap: 7, alignItems: 'center' }}>
                     <div>
                       <label style={labelSt}>Costo unit.</label>
                       <input type="number" min={0} placeholder="$"
-                        value={rows[idx].costo} onChange={e => updateRow(idx, 'costo', e.target.value)}
+                        value={rows[idx].costo}
+                        onChange={e => updateRow(idx, 'costo', e.target.value)}
                         style={inpSt(!!rows[idx].costo)} />
                     </div>
                     <div>
                       <label style={labelSt}>Margen</label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <input type="number" min={0} max={999} placeholder="0"
-                          value={rows[idx].margen} onChange={e => updateRow(idx, 'margen', e.target.value)}
+                          value={rows[idx].margen}
+                          onChange={e => updateRow(idx, 'margen', e.target.value)}
                           style={{ ...inpSt(!!rows[idx].margen), textAlign: 'center' }} />
                         <span style={{ fontSize: '0.75rem', color: MUTED, flexShrink: 0 }}>%</span>
                       </div>
@@ -445,8 +472,11 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
                         value={precioAuto ? String(r.precioFinal) : rows[idx].precio}
                         readOnly={precioAuto}
                         onChange={e => { if (!precioAuto) updateRow(idx, 'precio', e.target.value); }}
-                        style={{ ...inpSt(!!(rows[idx].precio || precioAuto)),
-                          color: precioAuto ? BLUE : TEXT, cursor: precioAuto ? 'default' : 'text' }} />
+                        style={{
+                          ...inpSt(!!(rows[idx].precio || precioAuto)),
+                          color: precioAuto ? BLUE : TEXT,
+                          cursor: precioAuto ? 'default' : 'text',
+                        }} />
                     </div>
                   </div>
                 </div>
@@ -455,7 +485,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
           </div>
         )}
 
-        {/* Totals */}
+        {/* Totals card */}
         {rows.length > 0 && (
           <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
             padding: '12px 14px', marginBottom: 12 }}>
@@ -466,7 +496,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
                 <span style={{ fontSize: '0.78rem', color: TEXT, fontWeight: 600 }}>{pesos(totalCosto)}</span>
                 {margenGlobal != null && (
                   <span style={{ fontSize: '0.78rem', fontWeight: 700,
-                    color: margenGlobal >= 20 ? GREEN : margenGlobal >= 10 ? AMBER : '#DC2626' }}>
+                    color: margenGlobal >= 20 ? GREEN : margenGlobal >= 10 ? AMBER : RED }}>
                     Margen {margenGlobal}%
                   </span>
                 )}
@@ -487,25 +517,25 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
           </div>
         )}
 
-        {/* Notes — two columns */}
+        {/* Notes — two side-by-side textareas */}
         <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
           padding: '12px 14px', marginBottom: 14 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
-              <label style={{ ...labelSt, display: 'block', marginBottom: 7 }}>Notas para el cliente</label>
-              <textarea value={notasCliente} onChange={e => setNotasCliente(e.target.value)}
-                placeholder="Condiciones, plazos, observaciones…" rows={4}
-                style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8,
-                  border: `1.5px solid ${BORDER}`, padding: '9px 11px', fontSize: '0.86rem',
-                  fontFamily: 'inherit', color: TEXT, resize: 'vertical', lineHeight: 1.5, outline: 'none' }} />
+              <label style={{ ...labelSt, display: 'block', marginBottom: 6 }}>
+                Notas internas
+              </label>
+              <textarea value={notasInternas} onChange={e => setNotasInternas(e.target.value)}
+                placeholder="Solo tú y el equipo las ven…"
+                rows={3} style={textareaSt} />
             </div>
             <div>
-              <label style={{ ...labelSt, display: 'block', marginBottom: 7 }}>Notas internas</label>
-              <textarea value={notasInternas} onChange={e => setNotasInternas(e.target.value)}
-                placeholder="Solo visible para el asesor…" rows={4}
-                style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8,
-                  border: `1.5px solid ${BORDER}`, padding: '9px 11px', fontSize: '0.86rem',
-                  fontFamily: 'inherit', color: TEXT, resize: 'vertical', lineHeight: 1.5, outline: 'none' }} />
+              <label style={{ ...labelSt, display: 'block', marginBottom: 6 }}>
+                Notas para el cliente
+              </label>
+              <textarea value={notasCliente} onChange={e => setNotasCliente(e.target.value)}
+                placeholder="Condiciones, plazos, aclaraciones…"
+                rows={3} style={textareaSt} />
             </div>
           </div>
         </div>
@@ -523,35 +553,38 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
                 Comparte el link con el cliente.
               </p>
             </div>
-            <button onClick={copyLink}
-              style={{ height: 34, borderRadius: 8, border: 'none', cursor: 'pointer',
-                flexShrink: 0, background: GREEN, color: WHITE,
-                fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, padding: '0 14px' }}>
+            <button onClick={copyLink} style={{ height: 34, borderRadius: 8, border: 'none',
+              cursor: 'pointer', flexShrink: 0, background: GREEN, color: WHITE,
+              fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, padding: '0 14px' }}>
               {copied ? '¡Copiado!' : 'Copiar link'}
             </button>
           </div>
         )}
+
       </div>
 
-      {/* Fixed bottom bar */}
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20,
-        background: WHITE, borderTop: `1px solid ${BORDER}` }}>
-        <div style={{ maxWidth: 640, margin: '0 auto', padding: '10px 14px', display: 'flex', gap: 8 }}>
-          <button onClick={guardar} disabled={saving}
-            style={{ width: 90, height: 46, borderRadius: 11, cursor: 'pointer',
-              border: `1.5px solid ${BORDER}`, background: BG,
-              color: savedMsg ? GREEN : TEXT, fontFamily: 'inherit',
-              fontSize: '0.85rem', fontWeight: 600, flexShrink: 0 }}>
-            {saving ? '…' : savedMsg || 'Guardar'}
-          </button>
-          <button onClick={enviarCliente}
-            style={{ flex: 1, height: 46, borderRadius: 11, border: 'none',
-              cursor: 'pointer', background: BLUE, color: WHITE,
-              fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 700 }}>
-            Enviar al cliente →
-          </button>
+      {/* Fixed bottom bar — only when not final */}
+      {!isFinal && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20,
+          background: WHITE, borderTop: `1px solid ${BORDER}` }}>
+          <div style={{ maxWidth: 640, margin: '0 auto',
+            padding: '10px 14px', display: 'flex', gap: 8 }}>
+            <button onClick={guardar} disabled={saving}
+              style={{ width: 90, height: 46, borderRadius: 11, cursor: 'pointer',
+                border: `1.5px solid ${BORDER}`, background: BG,
+                color: savedMsg ? GREEN : TEXT, fontFamily: 'inherit',
+                fontSize: '0.85rem', fontWeight: 600, flexShrink: 0 }}>
+              {saving ? '…' : savedMsg || 'Guardar'}
+            </button>
+            <button onClick={enviarCliente}
+              style={{ flex: 1, height: 46, borderRadius: 11, border: 'none',
+                cursor: 'pointer', background: BLUE, color: WHITE,
+                fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 700 }}>
+              Enviar al cliente →
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -561,6 +594,13 @@ const labelSt: React.CSSProperties = {
   fontSize: '0.64rem', fontWeight: 700, color: MUTED,
   textTransform: 'uppercase', letterSpacing: '0.04em',
 };
+
+const textareaSt: React.CSSProperties = {
+  width: '100%', boxSizing: 'border-box' as const, borderRadius: 8,
+  border: `1.5px solid ${BORDER}`, padding: '9px 11px', fontSize: '0.82rem',
+  fontFamily: 'inherit', color: TEXT, resize: 'vertical', lineHeight: 1.5, outline: 'none',
+};
+
 const inpSt = (filled: boolean): React.CSSProperties => ({
   height: 36, width: '100%', boxSizing: 'border-box' as const,
   borderRadius: 8, border: `1.5px solid ${filled ? BLUE : BORDER}`,
@@ -568,6 +608,7 @@ const inpSt = (filled: boolean): React.CSSProperties => ({
   textAlign: 'right' as const, color: TEXT,
   background: filled ? '#EFF6FF' : '#FAFAFA', outline: 'none',
 });
+
 function Row({ label, val, full }: { label: string; val: string; full?: boolean }) {
   return (
     <div style={{ gridColumn: full ? '1 / -1' : undefined, display: 'flex', gap: 6 }}>
