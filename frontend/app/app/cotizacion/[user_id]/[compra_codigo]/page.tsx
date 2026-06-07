@@ -11,7 +11,6 @@ interface CompraInfo {
   monto_referencial: number | null;
   region: string | null;
   fecha_cierre: string | null;
-  descripcion: string | null;
   lugar_entrega: string | null;
   plazo_entrega_dias: number | null;
 }
@@ -22,20 +21,7 @@ interface ItemCotizacion {
   descripcion: string | null;
   cantidad: number;
   unidad_medida: string;
-  estado: 'cotizable' | 'calculado' | 'fuera' | 'sin_analisis';
-  catalogo_nombre: string | null;
   precio_unitario: number | null;
-  confianza: number | null;
-  nota_ia: string | null;
-  manual?: boolean;
-}
-
-interface Relevancia {
-  id: string;
-  comentario: string | null;
-  visto: boolean;
-  cotizacion_descargada: boolean;
-  relevancia_score: number;
 }
 
 const BLUE      = '#003DA5';
@@ -48,8 +34,8 @@ const BORDER    = '#E5E7EB';
 const BG        = '#F9FAFB';
 const WHITE     = '#FFFFFF';
 
-function pesos(n: number | null | undefined) {
-  if (n == null || n === 0) return '—';
+function pesos(n: number) {
+  if (!n) return '—';
   return n.toLocaleString('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 });
 }
 
@@ -61,66 +47,35 @@ function fechaCorta(s: string | null) {
 export default function CotizacionPage({ params }: { params: { user_id: string; compra_codigo: string } }) {
   const { user_id, compra_codigo } = params;
 
-  const [compra, setCompra]       = useState<CompraInfo | null>(null);
-  const [items, setItems]         = useState<ItemCotizacion[]>([]);
-  const [relevancia, setRelevancia] = useState<Relevancia | null>(null);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState('');
+  const [compra, setCompra]   = useState<CompraInfo | null>(null);
+  const [items, setItems]     = useState<ItemCotizacion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadMsg, setLoadMsg] = useState('Cargando licitación…');
+  const [error, setError]     = useState('');
 
-  const [precios, setPrecios]     = useState<Record<string, string>>({});
-  const [comentario, setComentario]         = useState('');
-  const [savingComentario, setSavingComentario] = useState(false);
-  const [comentarioMsg, setComentarioMsg]   = useState('');
-
-  // Manual item form
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newItem, setNewItem] = useState({ nombre: '', cantidad: '1', unidad_medida: 'u', precio: '' });
+  const [precios, setPrecios]       = useState<Record<string, string>>({});
+  const [comentario, setComentario] = useState('');
+  const [savingMsg, setSavingMsg]   = useState('');
+  const [saving, setSaving]         = useState(false);
 
   useEffect(() => {
+    setLoadMsg('Descargando productos del portal…');
     fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) { setError(d.error); setLoading(false); return; }
         setCompra(d.compra);
         setItems(d.items ?? []);
-        setRelevancia(d.relevancia);
         setComentario(d.relevancia?.comentario ?? '');
-        const initial: Record<string, string> = {};
+        const init: Record<string, string> = {};
         (d.items ?? []).forEach((it: ItemCotizacion) => {
-          initial[it.id] = it.precio_unitario != null ? String(it.precio_unitario) : '';
+          init[it.id] = it.precio_unitario != null ? String(it.precio_unitario) : '';
         });
-        setPrecios(initial);
+        setPrecios(init);
         setLoading(false);
       })
       .catch(e => { setError(e.message); setLoading(false); });
   }, [user_id, compra_codigo]);
-
-  const addManualItem = () => {
-    if (!newItem.nombre.trim()) return;
-    const id = `manual-${Date.now()}`;
-    const it: ItemCotizacion = {
-      id,
-      nombre: newItem.nombre.trim(),
-      descripcion: null,
-      cantidad: Math.max(1, Number(newItem.cantidad) || 1),
-      unidad_medida: newItem.unidad_medida.trim() || 'u',
-      estado: 'sin_analisis',
-      catalogo_nombre: null,
-      precio_unitario: newItem.precio ? Number(newItem.precio) : null,
-      confianza: null,
-      nota_ia: null,
-      manual: true,
-    };
-    setItems(prev => [...prev, it]);
-    setPrecios(prev => ({ ...prev, [id]: newItem.precio }));
-    setNewItem({ nombre: '', cantidad: '1', unidad_medida: 'u', precio: '' });
-    setShowAddForm(false);
-  };
-
-  const removeItem = (id: string) => {
-    setItems(prev => prev.filter(it => it.id !== id));
-    setPrecios(prev => { const n = { ...prev }; delete n[id]; return n; });
-  };
 
   const rows = items.map(it => {
     const pu = Number(precios[it.id] ?? '') || 0;
@@ -131,16 +86,15 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
   const total    = subtotal + iva;
 
   const guardarComentario = async () => {
-    setSavingComentario(true);
-    setComentarioMsg('');
+    setSaving(true); setSavingMsg('');
     const res = await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ comentario }),
     });
     const json = await res.json();
-    setSavingComentario(false);
-    setComentarioMsg(json.ok ? 'Guardado' : 'Error al guardar');
+    setSaving(false);
+    setSavingMsg(json.ok ? 'Guardado ✓' : 'Error al guardar');
   };
 
   const descargarPDF = async () => {
@@ -153,9 +107,14 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
   };
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center',
-      justifyContent: 'center', fontFamily: '-apple-system, sans-serif', color: MUTED }}>
-      Cargando cotización…
+    <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: 12,
+      fontFamily: '-apple-system, sans-serif', color: MUTED }}>
+      <div style={{ width: 28, height: 28, borderRadius: '50%',
+        border: `3px solid ${BORDER}`, borderTopColor: BLUE,
+        animation: 'spin 0.8s linear infinite' }} />
+      <p style={{ margin: 0, fontSize: '0.85rem' }}>{loadMsg}</p>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 
@@ -168,258 +127,187 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
     </div>
   );
 
-  const inputSt: React.CSSProperties = {
-    height: 38, borderRadius: 8, border: `1.5px solid ${BORDER}`,
-    padding: '0 10px', fontSize: '0.85rem', fontFamily: 'inherit',
-    color: TEXT, boxSizing: 'border-box', width: '100%',
-    background: WHITE,
-  };
-
   return (
     <div style={{
       minHeight: '100vh', background: BG,
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif',
-      color: TEXT, maxWidth: 800, margin: '0 auto', paddingBottom: 48,
+      color: TEXT, maxWidth: 800, margin: '0 auto', paddingBottom: 60,
     }}>
       {/* Header */}
       <header style={{
         background: `linear-gradient(135deg, ${BLUE_DARK} 0%, ${BLUE} 100%)`,
         color: WHITE, padding: '14px 16px',
         display: 'flex', alignItems: 'center', gap: 10,
+        position: 'sticky', top: 0, zIndex: 10,
       }}>
         <Link href={`/app/dashboard/${user_id}`}
-          style={{ color: WHITE, textDecoration: 'none', fontSize: '1.1rem', lineHeight: 1,
-            padding: '4px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.15)' }}>
+          style={{ color: WHITE, textDecoration: 'none', fontSize: '1rem',
+            padding: '5px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.15)' }}>
           ←
         </Link>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontSize: '1rem', fontWeight: 700,
+          <h1 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {compra.nombre}
           </h1>
-          <p style={{ margin: 0, fontSize: '0.72rem', opacity: 0.7 }}>{compra.codigo}</p>
+          <p style={{ margin: 0, fontSize: '0.7rem', opacity: 0.65 }}>
+            {compra.organismo} · {compra.codigo}
+          </p>
         </div>
         <button onClick={descargarPDF} style={{
-          height: 36, borderRadius: 8, border: 'none', cursor: 'pointer',
+          height: 34, borderRadius: 8, border: 'none', cursor: 'pointer',
           background: WHITE, color: BLUE, fontFamily: 'inherit',
-          fontSize: '0.82rem', fontWeight: 700, padding: '0 14px', whiteSpace: 'nowrap',
+          fontSize: '0.8rem', fontWeight: 700, padding: '0 14px', whiteSpace: 'nowrap',
         }}>
           PDF ↓
         </button>
       </header>
 
-      <div style={{ padding: '16px' }}>
+      <div style={{ padding: '14px 16px' }}>
 
         {/* Compra info */}
-        <div style={{ background: WHITE, borderRadius: 14, border: `1px solid ${BORDER}`,
-          padding: '14px 16px', marginBottom: 14 }}>
-          <p style={{ margin: '0 0 2px', fontSize: '0.72rem', color: MUTED }}>{compra.organismo}</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px',
-            fontSize: '0.82rem', marginTop: 8 }}>
-            <InfoRow label="Código"  value={compra.codigo} />
-            <InfoRow label="Cierre"  value={fechaCorta(compra.fecha_cierre)} />
-            {compra.region && <InfoRow label="Región" value={compra.region} />}
-            {compra.monto_referencial
-              ? <InfoRow label="Presupuesto" value={pesos(compra.monto_referencial)} bold />
-              : null}
-            {compra.lugar_entrega && <InfoRow label="Entrega" value={compra.lugar_entrega} />}
-            {compra.plazo_entrega_dias
-              ? <InfoRow label="Plazo" value={`${compra.plazo_entrega_dias} días`} />
-              : null}
-          </div>
+        <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
+          padding: '12px 14px', marginBottom: 14,
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
+          <InfoRow label="Código"  value={compra.codigo} />
+          <InfoRow label="Cierre"  value={fechaCorta(compra.fecha_cierre)} />
+          {compra.region         && <InfoRow label="Región"     value={compra.region} />}
+          {compra.lugar_entrega  && <InfoRow label="Entrega"    value={compra.lugar_entrega} />}
+          {compra.plazo_entrega_dias
+            ? <InfoRow label="Plazo" value={`${compra.plazo_entrega_dias} días`} />
+            : null}
+          {compra.monto_referencial
+            ? <InfoRow label="Presupuesto ref." value={pesos(compra.monto_referencial)} bold />
+            : null}
         </div>
 
-        {/* Items */}
-        <div style={{ background: WHITE, borderRadius: 14, border: `1px solid ${BORDER}`,
+        {/* Products table */}
+        <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
           marginBottom: 14, overflow: 'hidden' }}>
 
-          {/* Table header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '12px 16px', borderBottom: `1px solid ${BORDER}` }}>
-            <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: TEXT }}>
-              Ítems cotizados {items.length > 0 && `(${items.length})`}
-            </h3>
-            <button
-              onClick={() => setShowAddForm(v => !v)}
-              style={{ height: 32, borderRadius: 8, border: `1.5px solid ${BLUE}`,
-                background: showAddForm ? BLUE : WHITE,
-                color: showAddForm ? WHITE : BLUE,
-                fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700,
-                padding: '0 12px', cursor: 'pointer' }}>
-              {showAddForm ? 'Cancelar' : '+ Agregar ítem'}
-            </button>
+          {/* Column headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 120px 100px',
+            gap: 8, padding: '9px 14px',
+            fontSize: '0.68rem', fontWeight: 700, color: MUTED,
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+            borderBottom: `1px solid ${BORDER}`, background: BG }}>
+            <span>Producto solicitado</span>
+            <span style={{ textAlign: 'center' }}>Cant.</span>
+            <span style={{ textAlign: 'right' }}>Precio neto unit.</span>
+            <span style={{ textAlign: 'right' }}>Total neto</span>
           </div>
 
-          {/* Add item form */}
-          {showAddForm && (
-            <div style={{ padding: '12px 16px', background: '#EFF6FF',
-              borderBottom: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 70px', gap: 8 }}>
-                <div>
-                  <label style={labelSt}>Descripción del ítem</label>
-                  <input style={inputSt} placeholder="Ej: Resmas de papel A4"
-                    value={newItem.nombre}
-                    onChange={e => setNewItem(p => ({ ...p, nombre: e.target.value }))}
-                    onKeyDown={e => e.key === 'Enter' && addManualItem()}
-                  />
-                </div>
-                <div>
-                  <label style={labelSt}>Cantidad</label>
-                  <input style={{ ...inputSt, textAlign: 'center' }} type="number" min={1}
-                    value={newItem.cantidad}
-                    onChange={e => setNewItem(p => ({ ...p, cantidad: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label style={labelSt}>Unidad</label>
-                  <input style={{ ...inputSt, textAlign: 'center' }} placeholder="u"
-                    value={newItem.unidad_medida}
-                    onChange={e => setNewItem(p => ({ ...p, unidad_medida: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'flex-end' }}>
-                <div>
-                  <label style={labelSt}>Precio unitario ($ neto)</label>
-                  <input style={{ ...inputSt, textAlign: 'right' }} type="number" min={0}
-                    placeholder="0"
-                    value={newItem.precio}
-                    onChange={e => setNewItem(p => ({ ...p, precio: e.target.value }))}
-                    onKeyDown={e => e.key === 'Enter' && addManualItem()}
-                  />
-                </div>
-                <button onClick={addManualItem} style={{
-                  height: 38, borderRadius: 8, border: 'none', cursor: 'pointer',
-                  background: BLUE, color: WHITE, fontFamily: 'inherit',
-                  fontSize: '0.85rem', fontWeight: 700, padding: '0 18px', whiteSpace: 'nowrap',
-                }}>
-                  Agregar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Empty state */}
-          {items.length === 0 && !showAddForm && (
-            <div style={{ padding: '32px 16px', textAlign: 'center' }}>
-              <p style={{ color: MUTED, fontSize: '0.85rem', margin: '0 0 6px' }}>
-                No hay ítems aún para esta licitación.
-              </p>
-              <p style={{ color: MUTED, fontSize: '0.78rem', margin: 0 }}>
-                Usa el botón "+ Agregar ítem" para ingresar los productos manualmente.
+          {items.length === 0 ? (
+            <div style={{ padding: '28px 16px', textAlign: 'center' }}>
+              <p style={{ color: MUTED, fontSize: '0.85rem', margin: 0 }}>
+                Esta licitación no tiene productos en su oferta técnica.
               </p>
             </div>
-          )}
-
-          {/* Rows */}
-          {rows.map((it, idx) => (
+          ) : rows.map((it, idx) => (
             <div key={it.id} style={{
-              display: 'grid', gridTemplateColumns: '1fr 70px 110px 90px',
-              gap: 8, padding: '10px 16px', alignItems: 'center',
+              display: 'grid', gridTemplateColumns: '1fr 80px 120px 100px',
+              gap: 8, padding: '11px 14px', alignItems: 'center',
               borderBottom: idx < rows.length - 1 ? `1px solid ${BORDER}` : 'none',
-              background: WHITE,
             }}>
-              {/* Name */}
+              {/* Product name */}
               <div>
                 <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: TEXT, lineHeight: 1.3 }}>
                   {it.nombre}
                 </p>
-                {it.catalogo_nombre && (
-                  <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: BLUE }}>
-                    → {it.catalogo_nombre}
+                {it.descripcion && it.descripcion !== it.nombre && (
+                  <p style={{ margin: '2px 0 0', fontSize: '0.73rem', color: MUTED, lineHeight: 1.3 }}>
+                    {it.descripcion}
                   </p>
                 )}
-                {it.manual && (
-                  <span style={{ fontSize: '0.65rem', color: MUTED }}>manual</span>
-                )}
               </div>
-              {/* Qty */}
-              <div style={{ textAlign: 'center', fontSize: '0.83rem', color: TEXT }}>
-                {it.cantidad} {it.unidad_medida}
+              {/* Quantity */}
+              <div style={{ textAlign: 'center', fontSize: '0.85rem', color: TEXT }}>
+                {it.cantidad} <span style={{ color: MUTED, fontSize: '0.75rem' }}>{it.unidad_medida}</span>
               </div>
               {/* Price input */}
               <input
-                type="number" min={0}
+                type="number"
+                min={0}
                 value={precios[it.id] ?? ''}
                 onChange={e => setPrecios(p => ({ ...p, [it.id]: e.target.value }))}
-                placeholder="$ precio"
+                placeholder="0"
                 style={{
-                  height: 36, borderRadius: 8, border: `1.5px solid ${BORDER}`,
-                  padding: '0 8px', fontSize: '0.83rem', fontFamily: 'inherit',
-                  textAlign: 'right', color: TEXT, boxSizing: 'border-box', width: '100%',
-                  background: WHITE,
+                  height: 36, borderRadius: 8,
+                  border: precios[it.id] ? `1.5px solid ${BLUE}` : `1.5px solid ${BORDER}`,
+                  padding: '0 10px', fontSize: '0.88rem', fontFamily: 'inherit',
+                  textAlign: 'right', color: TEXT,
+                  boxSizing: 'border-box', width: '100%',
+                  outline: 'none', background: precios[it.id] ? '#EFF6FF' : WHITE,
                 }}
               />
-              {/* Total + delete */}
-              <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center',
-                justifyContent: 'flex-end', gap: 6 }}>
-                <span style={{ fontSize: '0.83rem', fontWeight: 600,
-                  color: it.total > 0 ? TEXT : MUTED }}>
-                  {it.total > 0 ? pesos(it.total) : '—'}
-                </span>
-                {it.manual && (
-                  <button onClick={() => removeItem(it.id)}
-                    title="Eliminar"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer',
-                      color: MUTED, fontSize: '0.9rem', padding: '0 2px', lineHeight: 1 }}>
-                    ×
-                  </button>
-                )}
+              {/* Row total */}
+              <div style={{ textAlign: 'right', fontSize: '0.88rem',
+                fontWeight: it.total > 0 ? 600 : 400,
+                color: it.total > 0 ? TEXT : MUTED }}>
+                {it.total > 0 ? pesos(it.total) : '—'}
               </div>
             </div>
           ))}
 
-          {/* Totals */}
-          {rows.length > 0 && (
-            <div style={{ borderTop: `2px solid ${BORDER}`, padding: '12px 16px', background: BG }}>
-              {[
-                { label: 'Subtotal neto', value: pesos(subtotal), bold: false },
-                { label: 'IVA 19%',       value: pesos(iva),      bold: false },
-                { label: 'TOTAL',         value: pesos(total),    bold: true  },
-              ].map(r => (
-                <div key={r.label} style={{
-                  display: 'flex', justifyContent: 'space-between', padding: '3px 0',
-                  fontSize: r.bold ? '1rem' : '0.85rem',
-                  fontWeight: r.bold ? 800 : 400,
-                  color: r.bold ? BLUE : TEXT,
-                }}>
-                  <span>{r.label}</span>
-                  <span>{r.value}</span>
+          {/* Totals footer */}
+          {items.length > 0 && (
+            <div style={{ borderTop: `2px solid ${BORDER}`, padding: '12px 14px', background: BG }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ minWidth: 260 }}>
+                  {[
+                    { label: 'Subtotal neto', value: pesos(subtotal), bold: false },
+                    { label: 'IVA 19%',       value: pesos(iva),      bold: false },
+                  ].map(r => (
+                    <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between',
+                      padding: '3px 0', fontSize: '0.85rem', color: TEXT }}>
+                      <span style={{ color: MUTED }}>{r.label}</span>
+                      <span>{r.value}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between',
+                    padding: '6px 0 0', marginTop: 4,
+                    borderTop: `1px solid ${BORDER}`,
+                    fontSize: '1.05rem', fontWeight: 800, color: BLUE }}>
+                    <span>TOTAL</span>
+                    <span>{pesos(total)}</span>
+                  </div>
                 </div>
-              ))}
+              </div>
             </div>
           )}
         </div>
 
         {/* Comment */}
-        <div style={{ background: WHITE, borderRadius: 14, border: `1px solid ${BORDER}`,
-          padding: '14px 16px', marginBottom: 16 }}>
-          <h3 style={{ margin: '0 0 10px', fontSize: '0.9rem', fontWeight: 700, color: TEXT }}>
+        <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
+          padding: '14px', marginBottom: 16 }}>
+          <label style={{ display: 'block', marginBottom: 8,
+            fontSize: '0.72rem', fontWeight: 700, color: MUTED,
+            textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Comentario interno
-          </h3>
+          </label>
           <textarea
             value={comentario}
             onChange={e => setComentario(e.target.value)}
-            placeholder="Notas de revisión, decisiones, preguntas pendientes…"
+            placeholder="Notas de revisión, condiciones especiales, preguntas pendientes…"
             rows={3}
-            style={{
-              width: '100%', boxSizing: 'border-box', borderRadius: 10,
+            style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8,
               border: `1.5px solid ${BORDER}`, padding: '10px 12px',
               fontSize: '0.87rem', fontFamily: 'inherit', color: TEXT,
-              resize: 'vertical', lineHeight: 1.5,
-            }}
+              resize: 'vertical', lineHeight: 1.5, outline: 'none' }}
           />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-            {comentarioMsg && (
-              <span style={{ fontSize: '0.78rem', color: comentarioMsg.includes('Error') ? RED : GREEN }}>
-                {comentarioMsg}
-              </span>
-            )}
-            <button onClick={guardarComentario} disabled={savingComentario}
-              style={{ marginLeft: 'auto', height: 34, borderRadius: 8, border: 'none',
-                cursor: 'pointer', background: BLUE, color: WHITE,
-                fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600, padding: '0 16px' }}>
-              {savingComentario ? 'Guardando…' : 'Guardar'}
+          <div style={{ display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center', marginTop: 8 }}>
+            <span style={{ fontSize: '0.78rem',
+              color: savingMsg.includes('Error') ? RED : GREEN,
+              visibility: savingMsg ? 'visible' : 'hidden' }}>
+              {savingMsg || '.'}
+            </span>
+            <button onClick={guardarComentario} disabled={saving} style={{
+              height: 34, borderRadius: 8, border: 'none', cursor: 'pointer',
+              background: BLUE, color: WHITE, fontFamily: 'inherit',
+              fontSize: '0.82rem', fontWeight: 600, padding: '0 16px',
+            }}>
+              {saving ? 'Guardando…' : 'Guardar comentario'}
             </button>
           </div>
         </div>
@@ -436,11 +324,10 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
           <a href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${encodeURIComponent(compra.codigo)}`}
             target="_blank" rel="noopener noreferrer"
             style={{ height: 48, borderRadius: 12, border: `1.5px solid ${BLUE}`,
-              cursor: 'pointer', background: WHITE, color: BLUE,
-              fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 600,
-              padding: '0 20px', display: 'inline-flex', alignItems: 'center',
-              textDecoration: 'none' }}>
-            Portal ↗
+              background: WHITE, color: BLUE, fontFamily: 'inherit',
+              fontSize: '0.9rem', fontWeight: 600, padding: '0 20px',
+              display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>
+            Ver en portal ↗
           </a>
         </div>
       </div>
@@ -448,17 +335,11 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
   );
 }
 
-const labelSt: React.CSSProperties = {
-  display: 'block', marginBottom: 4,
-  fontSize: '0.7rem', fontWeight: 700, color: MUTED,
-  textTransform: 'uppercase', letterSpacing: '0.04em',
-};
-
 function InfoRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
     <div style={{ display: 'flex', gap: 6 }}>
-      <span style={{ color: MUTED, minWidth: 80, flexShrink: 0, fontSize: '0.82rem' }}>{label}</span>
-      <span style={{ color: '#111827', fontWeight: bold ? 700 : 400, fontSize: '0.82rem' }}>{value}</span>
+      <span style={{ color: MUTED, fontSize: '0.78rem', minWidth: 80, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: '#111827', fontSize: '0.82rem', fontWeight: bold ? 700 : 400 }}>{value}</span>
     </div>
   );
 }
