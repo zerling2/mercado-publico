@@ -136,7 +136,54 @@ interface RawItem {
   items?: Array<{ descripcion?: string; cantidad?: number; unidad?: string; especificaciones?: string }>;
   condiciones?: { plazo_entrega?: string | number; forma_pago?: string; garantia?: string; lugar_entrega?: string };
   contacto?: { nombre?: string; email?: string; fono?: string };
+  // Document fields — API may use any of these names
+  documentos?: RawDoc[];
+  archivos?: RawDoc[];
+  bases_tecnicas?: RawDoc[];
+  adjuntos?: RawDoc[];
   [key: string]: unknown;
+}
+
+interface RawDoc {
+  nombre?: string;
+  nombre_archivo?: string;
+  url?: string;
+  url_descarga?: string;
+  link?: string;
+  tipo?: string;
+  descripcion?: string;
+  fecha?: string;
+  [key: string]: unknown;
+}
+
+function extractDocs(raw: RawItem): Array<{ nombre: string; url: string; tipo: string }> {
+  // Collect from all possible document fields
+  const candidates: RawDoc[] = [
+    ...(raw.documentos ?? []),
+    ...(raw.archivos ?? []),
+    ...(raw.bases_tecnicas ?? []),
+    ...(raw.adjuntos ?? []),
+  ];
+
+  // Also scan top-level keys for arrays that look like doc lists
+  for (const [key, val] of Object.entries(raw)) {
+    if (
+      !['documentos','archivos','bases_tecnicas','adjuntos','items'].includes(key) &&
+      Array.isArray(val) && val.length > 0 &&
+      typeof val[0] === 'object' && val[0] !== null &&
+      ('url' in val[0] || 'url_descarga' in val[0] || 'link' in val[0])
+    ) {
+      candidates.push(...(val as RawDoc[]));
+    }
+  }
+
+  return candidates
+    .map(d => ({
+      nombre: d.nombre ?? d.nombre_archivo ?? d.descripcion ?? 'Documento',
+      url: d.url ?? d.url_descarga ?? d.link ?? '',
+      tipo: d.tipo ?? 'archivo',
+    }))
+    .filter(d => d.url);
 }
 
 function normalizar(raw: RawItem) {
@@ -175,5 +222,6 @@ function normalizar(raw: RawItem) {
       lugar_entrega: raw.condiciones?.lugar_entrega ?? null,
     },
     contacto: raw.contacto ?? null,
+    documentos: extractDocs(raw),
   };
 }

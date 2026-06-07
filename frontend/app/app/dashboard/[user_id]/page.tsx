@@ -164,6 +164,7 @@ interface DetalleCompra {
   items: Array<{ descripcion: string; cantidad: number | null; unidad: string | null; especificaciones: string | null }>;
   condiciones: { plazo_entrega: string | null; forma_pago: string | null; garantia: string | null; lugar_entrega: string | null };
   contacto: { nombre?: string; email?: string; fono?: string } | null;
+  documentos: Array<{ nombre: string; url: string; tipo: string }>;
   _fuente?: string;
   _aviso?: string;
 }
@@ -264,6 +265,35 @@ function DetallePanel({ codigo }: { codigo: string }) {
               <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: BLUE }}>
                 {pesos(detalle.monto)} CLP
               </p>
+            </Section>
+          )}
+
+          {/* Documentos / Bases técnicas */}
+          {detalle.documentos?.length > 0 && (
+            <Section title={`Bases técnicas y adjuntos (${detalle.documentos.length})`}>
+              {detalle.documentos.map((doc, i) => (
+                <a
+                  key={i}
+                  href={doc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: WHITE, borderRadius: 10, padding: '10px 12px',
+                    marginBottom: 6, border: `1px solid ${BORDER}`,
+                    textDecoration: 'none', color: TEXT,
+                  }}
+                >
+                  <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>
+                    {doc.tipo?.includes('pdf') || doc.nombre?.toLowerCase().includes('.pdf') ? '📄' : '📎'}
+                  </span>
+                  <span style={{ flex: 1, fontSize: '0.83rem', fontWeight: 500, color: BLUE,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {doc.nombre}
+                  </span>
+                  <span style={{ flexShrink: 0, fontSize: '0.75rem', color: MUTED }}>↓</span>
+                </a>
+              ))}
             </Section>
           )}
 
