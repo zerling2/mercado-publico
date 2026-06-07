@@ -153,7 +153,8 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
   const iva          = Math.round(subtotal * 0.19);
   const total        = subtotal + iva;
   const margenGlobal = totalCosto > 0 ? Math.round((subtotal / totalCosto - 1) * 100) : null;
-  const llenados     = calcRows.filter(r => r.precioFinal > 0).length;
+  const llenados      = calcRows.filter(r => r.precioFinal > 0).length;
+  const todosPreciados = rows.length > 0 && llenados === rows.length;
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column',
@@ -198,10 +199,13 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
             {compra.organismo} · {compra.codigo}
           </p>
         </div>
-        <button onClick={descargarPDF}
+        <button onClick={todosPreciados ? descargarPDF : undefined}
+          title={todosPreciados ? undefined : 'Completa todos los precios para generar el PDF'}
           style={{ height: 30, borderRadius: 6, border: 'none',
-            background: WHITE, color: BLUE, fontFamily: 'inherit',
-            fontSize: '0.75rem', fontWeight: 700, padding: '0 10px', cursor: 'pointer' }}>
+            background: todosPreciados ? WHITE : 'rgba(255,255,255,0.15)',
+            color: todosPreciados ? BLUE : 'rgba(255,255,255,0.4)',
+            fontFamily: 'inherit', fontSize: '0.75rem', fontWeight: 700,
+            padding: '0 10px', cursor: todosPreciados ? 'pointer' : 'default' }}>
           PDF ↓
         </button>
       </header>
