@@ -15,8 +15,7 @@ interface ItemBase {
 }
 interface CalcRow extends ItemBase {
   costo: string; margen: string; precio: string;
-  requiere_cliente: boolean; saved_id?: string;
-  expandDesc: boolean;
+  saved_id?: string; expandDesc: boolean;
 }
 
 const BLUE = '#003DA5'; const BLUE_D = '#00297A';
@@ -66,7 +65,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       setCompra(base.compra);
       setComentario(base.relevancia?.comentario ?? '');
       const savedMap = new Map((Array.isArray(saved) ? saved : []).map(
-        (s: { compra_producto_id: string; id: string; costo: number | null; margen: number | null; precio: number | null; requiere_cliente: boolean }) =>
+        (s: { compra_producto_id: string; id: string; costo: number | null; margen: number | null; precio: number | null }) =>
           [s.compra_producto_id, s]
       ));
       setRows((base.items ?? []).map((it: ItemBase) => {
@@ -76,7 +75,6 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
           costo:  sv?.costo  != null ? String(sv.costo)  : '',
           margen: sv?.margen != null ? String(sv.margen) : '',
           precio: sv?.precio != null ? String(sv.precio) : it.precio_unitario != null ? String(it.precio_unitario) : '',
-          requiere_cliente: sv?.requiere_cliente ?? false,
           saved_id: sv?.id,
           expandDesc: false,
         };
@@ -109,7 +107,6 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       costo:  r.costo  ? parseFloat(r.costo)  : null,
       margen: r.margen ? parseFloat(r.margen) : null,
       precio: r.precio ? parseFloat(r.precio) : null,
-      requiere_cliente: r.requiere_cliente,
     }));
     await Promise.all([
       fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}/items`, {
@@ -181,7 +178,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
   return (
     <div style={{ minHeight: '100vh', background: BG,
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif',
-      color: TEXT, maxWidth: 640, margin: '0 auto', paddingBottom: 80 }}>
+      color: TEXT, maxWidth: 640, margin: '0 auto', paddingBottom: 96 }}>
 
       {/* Sticky header */}
       <header style={{ background: `linear-gradient(135deg,${BLUE_D} 0%,${BLUE} 100%)`,
@@ -201,13 +198,6 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
             {compra.organismo} · {compra.codigo}
           </p>
         </div>
-        <button onClick={guardar} disabled={saving}
-          style={{ height: 30, borderRadius: 6, border: '1.5px solid rgba(255,255,255,0.35)',
-            background: 'transparent', color: savedMsg ? '#6EE7B7' : WHITE, fontFamily: 'inherit',
-            fontSize: '0.75rem', fontWeight: 600, padding: '0 10px', cursor: 'pointer',
-            whiteSpace: 'nowrap' }}>
-          {saving ? '…' : savedMsg || 'Guardar'}
-        </button>
         <button onClick={descargarPDF}
           style={{ height: 30, borderRadius: 6, border: 'none',
             background: WHITE, color: BLUE, fontFamily: 'inherit',
@@ -278,14 +268,13 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
             {calcRows.map((r, idx) => {
-              const precioAuto  = !!(r.costo && r.margen && !rows[idx].precio);
-              const faltaPrecio = !r.precioFinal;
-              const descLarga   = (r.descripcion ?? '').length > 60;
+              const precioAuto = !!(r.costo && r.margen && !rows[idx].precio);
+              const descLarga  = (r.descripcion ?? '').length > 60;
 
               return (
                 <div key={r.id} style={{
                   background: WHITE, borderRadius: 12,
-                  border: `1px solid ${faltaPrecio ? '#FCD34D' : BORDER}`,
+                  border: `1px solid ${BORDER}`,
                   overflow: 'hidden',
                 }}>
                   {/* Product header */}
@@ -331,7 +320,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
 
                   {/* Input row */}
                   <div style={{ padding: '0 14px 11px',
-                    display: 'grid', gridTemplateColumns: '1fr 80px 1fr 26px',
+                    display: 'grid', gridTemplateColumns: '1fr 80px 1fr',
                     gap: 7, alignItems: 'center' }}>
                     {/* Costo */}
                     <div>
@@ -367,22 +356,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
                           cursor: precioAuto ? 'default' : 'text',
                         }} />
                     </div>
-                    {/* Flag */}
-                    <div style={{ paddingTop: 16, textAlign: 'center' }}>
-                      <input type="checkbox" checked={rows[idx].requiere_cliente}
-                        onChange={e => updateRow(idx, 'requiere_cliente', e.target.checked)}
-                        title="El cliente debe completar este precio"
-                        style={{ width: 16, height: 16, cursor: 'pointer', accentColor: AMBER }} />
-                    </div>
                   </div>
-
-                  {/* Flag label */}
-                  {rows[idx].requiere_cliente && (
-                    <div style={{ background: '#FFFBEB', borderTop: `1px solid #FCD34D`,
-                      padding: '5px 14px', fontSize: '0.7rem', color: AMBER, fontWeight: 600 }}>
-                      🔔 El cliente completará este precio
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -453,27 +427,26 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
           </div>
         )}
 
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={enviarCliente} style={{ flex: 1, height: 46, borderRadius: 11,
-            border: 'none', cursor: 'pointer', background: BLUE, color: WHITE,
+      </div>
+
+      {/* Fixed bottom bar */}
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20,
+        background: WHITE, borderTop: `1px solid ${BORDER}` }}>
+        <div style={{ maxWidth: 640, margin: '0 auto',
+          padding: '10px 14px', display: 'flex', gap: 8 }}>
+        <button onClick={guardar} disabled={saving}
+          style={{ width: 90, height: 46, borderRadius: 11, cursor: 'pointer',
+            border: `1.5px solid ${BORDER}`, background: BG,
+            color: savedMsg ? GREEN : TEXT, fontFamily: 'inherit',
+            fontSize: '0.85rem', fontWeight: 600, flexShrink: 0 }}>
+          {saving ? '…' : savedMsg || 'Guardar'}
+        </button>
+        <button onClick={enviarCliente}
+          style={{ flex: 1, height: 46, borderRadius: 11, border: 'none',
+            cursor: 'pointer', background: BLUE, color: WHITE,
             fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 700 }}>
-            Enviar al cliente →
-          </button>
-          <button onClick={descargarPDF} style={{ height: 46, borderRadius: 11,
-            border: `1.5px solid ${BLUE}`, background: WHITE, color: BLUE,
-            fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 600,
-            padding: '0 14px', cursor: 'pointer' }}>
-            PDF ↓
-          </button>
-          <a href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${encodeURIComponent(compra.codigo)}`}
-            target="_blank" rel="noopener noreferrer"
-            style={{ height: 46, borderRadius: 11, border: `1.5px solid ${BORDER}`,
-              background: WHITE, color: MUTED, fontFamily: 'inherit', fontSize: '0.82rem',
-              fontWeight: 600, padding: '0 12px', display: 'inline-flex',
-              alignItems: 'center', textDecoration: 'none' }}>
-            Portal ↗
-          </a>
+          Enviar al cliente →
+        </button>
         </div>
       </div>
     </div>
