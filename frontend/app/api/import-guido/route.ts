@@ -7,8 +7,8 @@ const EXCEL_URL =
 
 const USUARIO_GUIDO = {
   email: 'guido@imprentayvestuario.cl',
-  empresa_nombre: 'Imprenta y Vestuario GUIDO',
-  rut: '16000000-0',
+  empresa_nombre: 'PROGRAF',
+  rut: '114241482',
   rubros_json: ['impresión', 'folletería', 'estampado', 'prendas', 'grabados'],
   region: 14,
 };
