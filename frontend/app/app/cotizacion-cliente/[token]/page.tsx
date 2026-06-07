@@ -69,16 +69,12 @@ export default function CotizacionClientePage() {
         if (estado === 'aprobada') { setDone('aprobada'); setLoading(false); return; }
         if (estado === 'rechazada') { setDone('rechazada'); setLoading(false); return; }
 
-        setRows((d.items ?? []).map((it: Item) => {
-          const editable = it.requiere_cliente;
-          return {
-            ...it,
-            // Use _cliente values if they exist, otherwise fall back to asesor values
-            costoEdit:  (editable ? it.costo_cliente : it.costo)  != null ? String(editable ? it.costo_cliente : it.costo)  : '',
-            margenEdit: (editable ? it.margen_cliente : it.margen) != null ? String(editable ? it.margen_cliente : it.margen) : '',
-            precioEdit: (editable ? it.precio_cliente : it.precio) != null ? String(editable ? it.precio_cliente : it.precio) : '',
-          };
-        }));
+        setRows((d.items ?? []).map((it: Item) => ({
+          ...it,
+          costoEdit:  (it.costo_cliente  ?? it.costo)  != null ? String(it.costo_cliente  ?? it.costo)  : '',
+          margenEdit: (it.margen_cliente ?? it.margen) != null ? String(it.margen_cliente ?? it.margen) : '',
+          precioEdit: (it.precio_cliente ?? it.precio) != null ? String(it.precio_cliente ?? it.precio) : '',
+        })));
         setLoading(false);
       })
       .catch(e => { setError(e.message); setLoading(false); });
@@ -102,14 +98,12 @@ export default function CotizacionClientePage() {
   }, []);
 
   const buildItems = () =>
-    rows
-      .filter(r => r.requiere_cliente)
-      .map(r => ({
-        id:             r.id,
-        costo_cliente:  r.costoEdit  ? parseFloat(r.costoEdit)  : null,
-        margen_cliente: r.margenEdit ? parseFloat(r.margenEdit) : null,
-        precio_cliente: r.precioEdit ? parseFloat(r.precioEdit) : null,
-      }));
+    rows.map(r => ({
+      id:             r.id,
+      costo_cliente:  r.costoEdit  ? parseFloat(r.costoEdit)  : null,
+      margen_cliente: r.margenEdit ? parseFloat(r.margenEdit) : null,
+      precio_cliente: r.precioEdit ? parseFloat(r.precioEdit) : null,
+    }));
 
   const aprobar = async () => {
     setSending(true);
@@ -137,7 +131,7 @@ export default function CotizacionClientePage() {
   });
   const subtotal = calcRows.reduce((s, r) => s + r.total, 0);
   const iva = Math.round(subtotal * 0.19);
-  const needsInput = rows.some(r => r.requiere_cliente && !r.precioEdit);
+  const needsInput = rows.some(r => !r.precioEdit);
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center',
@@ -253,75 +247,45 @@ export default function CotizacionClientePage() {
             <span style={{ textAlign: 'right' }}>Total</span>
           </div>
 
-          {calcRows.map((r, idx) => {
-            const editable = r.requiere_cliente;
-            const falta = editable && !r.precioEdit;
-            return (
-              <div key={r.id} style={{
-                display: 'grid', gridTemplateColumns: '2fr 65px 100px 75px 100px 85px',
-                gap: 6, padding: '9px 14px', alignItems: 'center',
-                borderBottom: idx < rows.length - 1 ? `1px solid ${BORDER}` : 'none',
-                background: falta ? '#FFFBEB' : WHITE,
-              }}>
-                <div>
-                  <p style={{ margin: 0, fontSize: '0.84rem', fontWeight: 600, lineHeight: 1.3 }}>
-                    {r.nombre}
-                    {editable && (
-                      <span style={{ marginLeft: 6, fontSize: '0.62rem', fontWeight: 700,
-                        color: AMBER, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        completar
-                      </span>
-                    )}
-                  </p>
-                  {r.descripcion && r.descripcion !== r.nombre && (
-                    <p style={{ margin: '1px 0 0', fontSize: '0.7rem', color: MUTED }}>{r.descripcion}</p>
-                  )}
-                </div>
-                <div style={{ textAlign: 'center', fontSize: '0.83rem' }}>
-                  {r.cantidad} <span style={{ color: MUTED, fontSize: '0.71rem' }}>{r.unidad_medida}</span>
-                </div>
-                {editable ? (
-                  <input type="number" min={0} placeholder="$ costo"
-                    value={r.costoEdit}
-                    onChange={e => update(idx, 'costoEdit', e.target.value)}
-                    style={inputSt(!!r.costoEdit)} />
-                ) : (
-                  <div style={{ textAlign: 'right', fontSize: '0.83rem', color: MUTED }}>
-                    {r.costo ? pesos(r.costo) : '—'}
-                  </div>
+          {calcRows.map((r, idx) => (
+            <div key={r.id} style={{
+              display: 'grid', gridTemplateColumns: '2fr 65px 100px 75px 100px 85px',
+              gap: 6, padding: '9px 14px', alignItems: 'center',
+              borderBottom: idx < rows.length - 1 ? `1px solid ${BORDER}` : 'none',
+              background: WHITE,
+            }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '0.84rem', fontWeight: 600, lineHeight: 1.3 }}>
+                  {r.nombre}
+                </p>
+                {r.descripcion && r.descripcion !== r.nombre && (
+                  <p style={{ margin: '1px 0 0', fontSize: '0.7rem', color: MUTED }}>{r.descripcion}</p>
                 )}
-                {editable ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <input type="number" min={0} max={999} placeholder="0"
-                      value={r.margenEdit}
-                      onChange={e => update(idx, 'margenEdit', e.target.value)}
-                      style={{ ...inputSt(!!r.margenEdit), width: '65%' }} />
-                    <span style={{ fontSize: '0.75rem', color: MUTED }}>%</span>
-                  </div>
-                ) : (
-                  <div style={{ textAlign: 'right', fontSize: '0.83rem', color: MUTED }}>
-                    {r.margen ? `${r.margen}%` : '—'}
-                  </div>
-                )}
-                {editable ? (
-                  <input type="number" min={0} placeholder="$ precio"
-                    value={r.precioEdit}
-                    onChange={e => update(idx, 'precioEdit', e.target.value)}
-                    style={inputSt(!!r.precioEdit)} />
-                ) : (
-                  <div style={{ textAlign: 'right', fontSize: '0.83rem',
-                    fontWeight: r.precioFinal ? 600 : 400,
-                    color: r.precioFinal ? TEXT : MUTED }}>
-                    {r.precioFinal ? pesos(r.precioFinal) : '—'}
-                  </div>
-                )}
-                <div style={{ textAlign: 'right', fontSize: '0.83rem',
-                  fontWeight: r.total > 0 ? 600 : 400, color: r.total > 0 ? TEXT : MUTED }}>
-                  {r.total > 0 ? pesos(r.total) : '—'}
-                </div>
               </div>
-            );
-          })}
+              <div style={{ textAlign: 'center', fontSize: '0.83rem' }}>
+                {r.cantidad} <span style={{ color: MUTED, fontSize: '0.71rem' }}>{r.unidad_medida}</span>
+              </div>
+              <input type="number" min={0} placeholder="$ costo"
+                value={r.costoEdit}
+                onChange={e => update(idx, 'costoEdit', e.target.value)}
+                style={inputSt(!!r.costoEdit)} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <input type="number" min={0} max={999} placeholder="0"
+                  value={r.margenEdit}
+                  onChange={e => update(idx, 'margenEdit', e.target.value)}
+                  style={{ ...inputSt(!!r.margenEdit), width: '65%' }} />
+                <span style={{ fontSize: '0.75rem', color: MUTED }}>%</span>
+              </div>
+              <input type="number" min={0} placeholder="$ precio"
+                value={r.precioEdit}
+                onChange={e => update(idx, 'precioEdit', e.target.value)}
+                style={inputSt(!!r.precioEdit)} />
+              <div style={{ textAlign: 'right', fontSize: '0.83rem',
+                fontWeight: r.total > 0 ? 600 : 400, color: r.total > 0 ? TEXT : MUTED }}>
+                {r.total > 0 ? pesos(r.total) : '—'}
+              </div>
+            </div>
+          ))}
 
           <div style={{ borderTop: `2px solid ${BORDER}`, padding: '12px 14px', background: BG,
             display: 'flex', justifyContent: 'flex-end' }}>

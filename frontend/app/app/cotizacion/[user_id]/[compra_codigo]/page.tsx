@@ -63,8 +63,6 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
   const [error, setError]                 = useState('');
   const [saving, setSaving]               = useState(false);
   const [savedMsg, setSavedMsg]           = useState('');
-  const [sendToken, setSendToken]         = useState('');
-  const [copied, setCopied]               = useState(false);
   const [infoExpanded, setInfoExpanded]   = useState(false);
 
   useEffect(() => {
@@ -78,7 +76,6 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       setNotasInternas(base.relevancia?.comentario ?? '');
       setNotasCliente(base.notas_cliente ?? '');
       setCotizacion(base.cotizacion ?? null);
-      if (base.cotizacion?.token) setSendToken(base.cotizacion.token);
       const savedMap = new Map((Array.isArray(saved) ? saved : []).map(
         (s: { compra_producto_id: string; id: string; costo: number | null; margen: number | null; precio: number | null }) =>
           [s.compra_producto_id, s]
@@ -139,21 +136,14 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
 
   const enviarCliente = async () => {
     await guardar();
-    const res = await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}/enviar`, {
+    await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}/enviar`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
-    }).then(r => r.json());
-    if (res.token) {
-      setSendToken(res.token);
-      // Reload to get cotizacion state
-      const base = await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`).then(r => r.json());
-      setCotizacion(base.cotizacion ?? null);
-    }
-  };
-
-  const copyLink = async () => {
-    await navigator.clipboard.writeText(`${window.location.origin}/app/cotizacion-cliente/${sendToken}`);
-    setCopied(true); setTimeout(() => setCopied(false), 2000);
+    });
+    const base = await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`).then(r => r.json());
+    setCotizacion(base.cotizacion ?? null);
+    setSavedMsg('Enviada al cliente ✓');
+    setTimeout(() => setSavedMsg(''), 3000);
   };
 
   const descargarPDF = async () => {
@@ -540,26 +530,6 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
           </div>
         </div>
 
-        {/* Send token banner */}
-        {sendToken && (
-          <div style={{ background: '#ECFDF5', border: `1.5px solid #6EE7B7`, borderRadius: 12,
-            padding: '12px 14px', marginBottom: 14,
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-            <div>
-              <p style={{ margin: '0 0 2px', fontWeight: 700, color: '#065F46', fontSize: '0.85rem' }}>
-                ¡Lista para enviar!
-              </p>
-              <p style={{ margin: 0, color: '#047857', fontSize: '0.75rem' }}>
-                Comparte el link con el cliente.
-              </p>
-            </div>
-            <button onClick={copyLink} style={{ height: 34, borderRadius: 8, border: 'none',
-              cursor: 'pointer', flexShrink: 0, background: GREEN, color: WHITE,
-              fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, padding: '0 14px' }}>
-              {copied ? '¡Copiado!' : 'Copiar link'}
-            </button>
-          </div>
-        )}
 
       </div>
 
