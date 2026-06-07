@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 function sb() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 }
 
-interface CatalogItem { id: string; nombre: string; categoria: string; unidad: string; precio_base: number }
 interface CompraProducto { id: string; nombre: string; descripcion: string | null; cantidad: number | null; unidad_medida: string | null }
 interface MatchResult { index: number; estado: 'cotizable' | 'calculado' | 'fuera'; catalogo_nombre: string | null; precio_sugerido: number | null; confianza: number; nota: string }
 
@@ -16,11 +15,11 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurada' }, { status: 500 });
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return NextResponse.json({ error: 'OPENAI_API_KEY no configurada' }, { status: 500 });
 
   const { limite = 10 } = await req.json().catch(() => ({}));
-  const client = new Anthropic({ apiKey });
+  const client = new OpenAI({ apiKey });
 
   // 1. Get client catalog
   const { data: catalogo } = await sb()
@@ -49,13 +48,11 @@ export async function POST(
   let actualizadas = 0;
 
   for (const rel of relevantes) {
-    // Get products for this compra
     const { data: productos } = await sb()
       .from('compra_productos')
       .select('id, nombre, descripcion, cantidad, unidad_medida')
       .eq('compra_agil_id', rel.compra_agil_id);
 
-    // Fallback: use compra name if no products extracted yet
     let items: CompraProducto[] = productos ?? [];
     if (!items.length) {
       const { data: compra } = await sb()
@@ -68,9 +65,8 @@ export async function POST(
     }
 
     try {
-      const results = await matchWithClaude(client, catalogStr, items);
+      const results = await matchWithGPT(client, catalogStr, items);
 
-      // Save matchings and collect scores
       let scoreSum = 0;
       let cotizables = 0;
       let calculados = 0;
@@ -98,7 +94,6 @@ export async function POST(
         }
       }
 
-      // Update score: weighted avg (0-100)
       const nuevoScore = Math.round((scoreSum / items.length) * 100);
       const razon = `IA: ${cotizables} cotizables, ${calculados} calculados de ${items.length}`;
       await sb().from('relevancia_compras')
@@ -114,8 +109,8 @@ export async function POST(
   return NextResponse.json({ procesadas, actualizadas });
 }
 
-async function matchWithClaude(
-  client: Anthropic,
+async function matchWithGPT(
+  client: OpenAI,
   catalogStr: string,
   items: CompraProducto[]
 ): Promise<MatchResult[]> {
@@ -125,9 +120,10 @@ async function matchWithClaude(
     )
     .join('\n');
 
-  const msg = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o-mini',
     max_tokens: 2048,
+    response_format: { type: 'json_object' },
     messages: [{
       role: 'user',
       content: `Clasifica cada ítem solicitado contra el catálogo del proveedor. Responde SOLO JSON válido.
@@ -148,9 +144,7 @@ Reglas:
     }],
   });
 
-  const text = (msg.content[0] as { type: string; text: string }).text ?? '';
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON en respuesta de Claude');
-  const parsed = JSON.parse(jsonMatch[0]);
+  const text = response.choices[0]?.message?.content ?? '';
+  const parsed = JSON.parse(text);
   return parsed.items as MatchResult[];
 }
