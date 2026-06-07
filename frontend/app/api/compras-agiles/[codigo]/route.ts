@@ -27,7 +27,7 @@ export async function GET(
     return NextResponse.json({
       ...fromDB(dbRow),
       _fuente: 'base_de_datos',
-      _aviso: 'MERCADO_PUBLICO_TICKET no configurado en Vercel — datos parciales desde base de datos local',
+      _aviso: 'MERCADO_PUBLICO_TICKET no configurado — datos parciales desde base de datos local',
     });
   }
 
@@ -48,104 +48,26 @@ export async function GET(
   return NextResponse.json({
     ...fromDB(dbRow),
     _fuente: 'base_de_datos',
-    _aviso: 'Compra no encontrada en la API — mostrando datos desde base de datos local',
+    _aviso: 'Compra no encontrada en la API',
   });
 }
 
 async function buscarEnAPI(ticket: string, codigo: string): Promise<Record<string, unknown> | null> {
   const headers = { ticket };
-  let foundItem: Record<string, unknown> | null = null;
 
-  // Pattern 1: detail by codigo as path param
-  try {
-    const r1 = await fetch(`${API_V2}/v2/compra-agil/${encodeURIComponent(codigo)}`, { headers });
-    if (r1.ok) {
-      const j = await r1.json();
-      const item = j?.payload ?? j;
-      if (item?.codigo || item?.nombre) foundItem = { ...item };
+  // Primary: direct detail endpoint (returns full payload including documentos)
+  const r = await fetch(`${API_V2}/v2/compra-agil/${encodeURIComponent(codigo)}`, { headers });
+  if (r.ok) {
+    const j = await r.json();
+    if (j?.success === 'NOK') {
+      const errMsg = (j?.errors?.[0]?.mensaje as string) ?? 'API devolvió error';
+      throw new Error(errMsg);
     }
-  } catch { /* fall through */ }
-
-  // Pattern 2: list search — codigo_externo param
-  if (!foundItem) {
-    try {
-      const r2 = await fetch(
-        `${API_V2}/v2/compra-agil?codigo_externo=${encodeURIComponent(codigo)}&tamano_pagina=5`,
-        { headers }
-      );
-      if (r2.ok) {
-        const j = await r2.json();
-        const items: Record<string, unknown>[] = j?.payload?.items ?? [];
-        const match = items.find((i) => i.codigo === codigo);
-        if (match) foundItem = { ...match };
-        else if (items.length === 1) foundItem = { ...items[0] };
-      }
-    } catch { /* fall through */ }
+    const item = j?.payload ?? j;
+    if (item?.codigo || item?.nombre) return item as Record<string, unknown>;
   }
 
-  // Pattern 3: nombre search
-  if (!foundItem) {
-    try {
-      const r3 = await fetch(
-        `${API_V2}/v2/compra-agil?nombre=${encodeURIComponent(codigo)}&tamano_pagina=5`,
-        { headers }
-      );
-      if (r3.ok) {
-        const j = await r3.json();
-        const items: Record<string, unknown>[] = j?.payload?.items ?? [];
-        const match = items.find((i) => i.codigo === codigo);
-        if (match) foundItem = { ...match };
-      }
-    } catch { /* fall through */ }
-  }
-
-  if (!foundItem) {
-    throw new Error(`API no encontró la compra (intenté 3 endpoints).`);
-  }
-
-  // Augment with documents from dedicated sub-endpoints
-  const [docsResult, archivosResult] = await Promise.allSettled([
-    fetch(`${API_V2}/v2/compra-agil/${encodeURIComponent(codigo)}/documentos`, { headers })
-      .then(r => r.ok ? r.json() : null),
-    fetch(`${API_V2}/v2/compra-agil/${encodeURIComponent(codigo)}/archivos`, { headers })
-      .then(r => r.ok ? r.json() : null),
-  ]);
-
-  const docsRaw = docsResult.status === 'fulfilled' ? docsResult.value : null;
-  const archivosRaw = archivosResult.status === 'fulfilled' ? archivosResult.value : null;
-
-  const docsList = extractArrayFromResponse(docsRaw);
-  const archivosList = extractArrayFromResponse(archivosRaw);
-
-  if (docsList?.length) foundItem._sub_documentos = docsList;
-  if (archivosList?.length) foundItem._sub_archivos = archivosList;
-
-  return foundItem;
-}
-
-// Unwrap various response shapes to get the actual array
-function extractArrayFromResponse(data: unknown): unknown[] | null {
-  if (!data) return null;
-  if (Array.isArray(data)) return data;
-  if (data && typeof data === 'object') {
-    const d = data as Record<string, unknown>;
-    if (Array.isArray(d.payload)) return d.payload;
-    if (d.payload && typeof d.payload === 'object') {
-      const p = d.payload as Record<string, unknown>;
-      for (const val of Object.values(p)) {
-        if (Array.isArray(val) && val.length > 0) return val;
-      }
-    }
-    // Check known wrapper keys
-    for (const key of ['documentos', 'archivos', 'items', 'data', 'result', 'results']) {
-      if (Array.isArray(d[key])) return d[key] as unknown[];
-    }
-    // Any array value
-    for (const val of Object.values(d)) {
-      if (Array.isArray(val) && val.length > 0) return val;
-    }
-  }
-  return null;
+  throw new Error(`API no encontró la compra (estado HTTP: ${r.status})`);
 }
 
 function fromDB(row: Record<string, unknown> | null | undefined) {
@@ -170,32 +92,15 @@ function fromDB(row: Record<string, unknown> | null | undefined) {
   };
 }
 
-function fmtFecha(s?: string): string {
+function fmtFecha(s?: string | null): string {
   if (!s) return '—';
   return new Date(s).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-interface RawItem {
-  codigo?: string;
-  nombre?: string;
-  descripcion?: string;
-  estado?: { codigo?: string; nombre?: string } | string;
-  montos?: { monto_disponible_clp?: number; moneda?: string };
-  institucion?: { nombre?: string; rut?: string; region?: string; comuna?: string };
-  fechas?: { fecha_publicacion?: string; fecha_cierre?: string; fecha_fin_preguntas?: string };
-  items?: Array<{ descripcion?: string; cantidad?: number; unidad?: string; especificaciones?: string }>;
-  condiciones?: { plazo_entrega?: string | number; forma_pago?: string; garantia?: string; lugar_entrega?: string };
-  contacto?: { nombre?: string; email?: string; fono?: string };
-  documentos?: RawDoc[];
-  archivos?: RawDoc[];
-  bases_tecnicas?: RawDoc[];
-  adjuntos?: RawDoc[];
-  _sub_documentos?: unknown[];
-  _sub_archivos?: unknown[];
-  [key: string]: unknown;
-}
+// ── Interfaces for the actual MP API v2 response shape ──────────────────────
 
 interface RawDoc {
+  id?: number | string;
   nombre?: string;
   nombre_archivo?: string;
   url?: string;
@@ -203,47 +108,115 @@ interface RawDoc {
   link?: string;
   tipo?: string;
   descripcion?: string;
-  fecha?: string;
   [key: string]: unknown;
 }
 
-function extractDocs(raw: RawItem): Array<{ nombre: string; url: string; tipo: string }> {
+interface RawInstitucion {
+  organismo_comprador?: string;
+  nombre?: string;
+  rut?: string;
+  unidad_compra?: string;
+  region?: number | string;
+  nombre_region?: string;
+  comuna?: string;
+}
+
+interface RawProducto {
+  codigo_producto?: number;
+  nombre?: string;
+  descripcion?: string;
+  cantidad?: number;
+  unidad_medida?: string;
+  unidad?: string;
+  especificaciones?: string;
+}
+
+interface RawPresupuesto {
+  monto_disponible_clp?: number;
+  monto_disponible?: number;
+  presupuesto_estimado?: number;
+  moneda?: string;
+}
+
+interface RawEntrega {
+  direccion_entrega?: string;
+  plazo_entrega_dias?: number;
+}
+
+interface RawEstado {
+  glosa?: string;
+  nombre?: string;
+  codigo?: string;
+}
+
+interface RawItem {
+  codigo?: string;
+  nombre?: string;
+  descripcion?: string;
+  estado?: RawEstado | string;
+  institucion?: RawInstitucion;
+  presupuesto?: RawPresupuesto;
+  montos?: RawPresupuesto;
+  fechas?: { fecha_publicacion?: string; fecha_cierre?: string; fecha_fin_preguntas?: string };
+  productos_solicitados?: RawProducto[];
+  items?: RawProducto[];
+  entrega?: RawEntrega;
+  condiciones?: { plazo_entrega?: string | number; forma_pago?: string; garantia?: string; lugar_entrega?: string };
+  contacto?: { nombre?: string; email?: string; fono?: string } | null;
+  documentos?: RawDoc[];
+  archivos?: RawDoc[];
+  bases_tecnicas?: RawDoc[];
+  adjuntos?: RawDoc[];
+  [key: string]: unknown;
+}
+
+// ── Document extraction ─────────────────────────────────────────────────────
+
+function extractDocs(raw: RawItem, codigo?: string): Array<{ nombre: string; url: string; tipo: string }> {
   const candidates: RawDoc[] = [
     ...(raw.documentos ?? []),
     ...(raw.archivos ?? []),
     ...(raw.bases_tecnicas ?? []),
     ...(raw.adjuntos ?? []),
-    ...((raw._sub_documentos as RawDoc[] | undefined) ?? []),
-    ...((raw._sub_archivos as RawDoc[] | undefined) ?? []),
   ];
 
-  // Scan all top-level keys for arrays that look like doc lists
-  const knownKeys = new Set(['documentos','archivos','bases_tecnicas','adjuntos','items','_sub_documentos','_sub_archivos']);
+  // Scan unknown top-level array keys that look like document lists
+  const knownKeys = new Set(['documentos', 'archivos', 'bases_tecnicas', 'adjuntos', 'items', 'productos_solicitados']);
   for (const [key, val] of Object.entries(raw)) {
     if (!knownKeys.has(key) && Array.isArray(val) && val.length > 0) {
-      const first = val[0];
-      if (typeof first === 'object' && first !== null) {
-        const f = first as Record<string, unknown>;
-        if ('url' in f || 'url_descarga' in f || 'link' in f || 'nombre_archivo' in f) {
-          candidates.push(...(val as RawDoc[]));
-        }
+      const first = val[0] as Record<string, unknown>;
+      if (typeof first === 'object' && first !== null &&
+        ('url' in first || 'url_descarga' in first || 'link' in first || 'nombre_archivo' in first || 'id' in first)) {
+        candidates.push(...(val as RawDoc[]));
       }
     }
   }
 
   return candidates
-    .map(d => ({
-      nombre: d.nombre ?? d.nombre_archivo ?? d.descripcion ?? 'Documento',
-      url: d.url ?? d.url_descarga ?? d.link ?? '',
-      tipo: d.tipo ?? 'archivo',
-    }))
+    .map(d => {
+      const nombre = d.nombre ?? d.nombre_archivo ?? d.descripcion ?? 'Documento';
+      let url = d.url ?? d.url_descarga ?? d.link ?? '';
+      // API v2 returns docs with {id, nombre} only — route through our proxy
+      if (!url && d.id !== undefined && codigo) {
+        url = `/api/mp-doc/${encodeURIComponent(codigo)}/${d.id}`;
+      }
+      const tipo = d.tipo ?? (nombre.toLowerCase().endsWith('.pdf') ? 'pdf' : 'archivo');
+      return { nombre, url, tipo };
+    })
     .filter(d => d.url);
 }
 
+// ── Normalise API response to our canonical shape ───────────────────────────
+
 function normalizar(raw: RawItem) {
   const estado = typeof raw.estado === 'object'
-    ? (raw.estado?.nombre ?? raw.estado?.codigo ?? '—')
+    ? (raw.estado?.glosa ?? raw.estado?.nombre ?? raw.estado?.codigo ?? '—')
     : (raw.estado ?? '—');
+
+  const inst = raw.institucion;
+  const pres = raw.presupuesto ?? raw.montos;
+  const ent = raw.entrega;
+  const prods = raw.productos_solicitados ?? raw.items ?? [];
 
   return {
     codigo: raw.codigo ?? '—',
@@ -251,31 +224,36 @@ function normalizar(raw: RawItem) {
     descripcion: raw.descripcion ?? null,
     estado,
     organismo: {
-      nombre: raw.institucion?.nombre ?? null,
-      rut: raw.institucion?.rut ?? null,
-      region: raw.institucion?.region ?? null,
-      comuna: raw.institucion?.comuna ?? null,
+      nombre: inst?.organismo_comprador ?? inst?.nombre ?? null,
+      rut: inst?.rut ?? null,
+      region: inst?.nombre_region ?? (inst?.region != null ? String(inst.region) : null),
+      comuna: inst?.unidad_compra ?? null,
     },
-    monto: raw.montos?.monto_disponible_clp ?? null,
-    moneda: raw.montos?.moneda ?? 'CLP',
+    monto: pres?.monto_disponible_clp ?? pres?.monto_disponible ?? pres?.presupuesto_estimado ?? null,
+    moneda: pres?.moneda ?? 'CLP',
     fechas: {
       publicacion: fmtFecha(raw.fechas?.fecha_publicacion),
       cierre: fmtFecha(raw.fechas?.fecha_cierre),
       fin_preguntas: fmtFecha(raw.fechas?.fecha_fin_preguntas),
     },
-    items: (raw.items ?? []).map(it => ({
-      descripcion: it.descripcion ?? '—',
+    items: prods.map(it => ({
+      descripcion: it.nombre ?? it.descripcion ?? '—',
       cantidad: it.cantidad ?? null,
-      unidad: it.unidad ?? null,
-      especificaciones: it.especificaciones ?? null,
+      unidad: it.unidad_medida ?? it.unidad ?? null,
+      // Show full description as specs when it differs from the short name
+      especificaciones: (it.nombre && it.descripcion && it.nombre !== it.descripcion)
+        ? it.descripcion
+        : (it.especificaciones ?? null),
     })),
     condiciones: {
-      plazo_entrega: raw.condiciones?.plazo_entrega ? `${raw.condiciones.plazo_entrega} días` : null,
+      plazo_entrega: ent?.plazo_entrega_dias
+        ? `${ent.plazo_entrega_dias} días`
+        : (raw.condiciones?.plazo_entrega ? `${raw.condiciones.plazo_entrega} días` : null),
       forma_pago: raw.condiciones?.forma_pago ?? null,
       garantia: raw.condiciones?.garantia ?? null,
-      lugar_entrega: raw.condiciones?.lugar_entrega ?? null,
+      lugar_entrega: ent?.direccion_entrega ?? raw.condiciones?.lugar_entrega ?? null,
     },
     contacto: raw.contacto ?? null,
-    documentos: extractDocs(raw),
+    documentos: extractDocs(raw, raw.codigo),
   };
 }
