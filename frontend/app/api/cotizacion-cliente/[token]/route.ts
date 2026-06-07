@@ -8,36 +8,17 @@ function sb() {
 export async function GET(_req: NextRequest, { params }: { params: { token: string } }) {
   const { token } = params;
 
-  const { data: cot } = await sb()
-    .from('cotizaciones')
-    .select('id, user_id, compra_agil_id, estado, notas, enviada_at, respondida_at, respuesta_cliente, comentario_rechazo')
-    .eq('token', token)
-    .maybeSingle();
+  const { data, error } = await sb().rpc('get_cotizacion_by_token', { p_token: token });
 
-  if (!cot) return NextResponse.json({ error: 'Cotización no encontrada' }, { status: 404 });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data)  return NextResponse.json({ error: 'Cotización no encontrada' }, { status: 404 });
 
-  // Mark as vista on first open
-  if (cot.estado === 'enviada') {
-    await sb().from('cotizaciones').update({
-      estado:   'vista',
-      vista_at: new Date().toISOString(),
-    }).eq('id', cot.id);
-    cot.estado = 'vista';
-  }
-
-  const [{ data: compra }, { data: usuario }, { data: items }] = await Promise.all([
-    sb().from('compras_agiles')
-      .select('codigo, nombre, organismo_nombre, monto, region, fecha_cierre')
-      .eq('id', cot.compra_agil_id).maybeSingle(),
-    sb().from('users')
-      .select('empresa_nombre, rut')
-      .eq('id', cot.user_id).maybeSingle(),
-    sb().from('cotizacion_items')
-      .select('id, nombre, descripcion, cantidad, unidad_medida, costo, margen, precio, requiere_cliente, costo_cliente, margen_cliente, precio_cliente')
-      .eq('user_id', cot.user_id)
-      .eq('compra_agil_id', cot.compra_agil_id)
-      .order('created_at'),
-  ]);
+  const { cot, compra, usuario, items } = data as {
+    cot:     Record<string, unknown>;
+    compra:  Record<string, unknown> | null;
+    usuario: Record<string, unknown> | null;
+    items:   unknown[];
+  };
 
   return NextResponse.json({ cot, compra, usuario, items: items ?? [] });
 }
@@ -46,50 +27,27 @@ export async function PATCH(req: NextRequest, { params }: { params: { token: str
   const { token } = params;
   const body = await req.json().catch(() => ({}));
 
-  const { data: cot } = await sb()
-    .from('cotizaciones')
-    .select('id, user_id, compra_agil_id, estado')
-    .eq('token', token)
-    .maybeSingle();
-
-  if (!cot) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
-
-  // Prevent double-response
-  if (['aprobada', 'rechazada'].includes(cot.estado)) {
-    return NextResponse.json({ error: 'Ya respondida' }, { status: 409 });
-  }
-
-  // Save _cliente columns for items where requiere_cliente=true
-  const { items } = body as {
-    items?: Array<{ id: string; costo_cliente?: number; margen_cliente?: number; precio_cliente?: number }>;
+  const { items, aprobar, rechazar, completar, comentario } = body as {
+    items?:    Array<{ id: string; costo_cliente?: number; margen_cliente?: number; precio_cliente?: number }>;
+    aprobar?:  boolean;
+    rechazar?: boolean;
+    completar?: boolean;
+    comentario?: string;
   };
 
-  if (items?.length) {
-    for (const it of items) {
-      await sb().from('cotizacion_items').update({
-        costo_cliente:  it.costo_cliente  ?? null,
-        margen_cliente: it.margen_cliente ?? null,
-        precio_cliente: it.precio_cliente ?? null,
-        updated_at: new Date().toISOString(),
-      }).eq('id', it.id);
-    }
-  }
+  const { data, error } = await sb().rpc('respond_cotizacion', {
+    p_token:     token,
+    p_aprobar:   (aprobar || completar) ? true : null,
+    p_rechazar:  rechazar ? true : null,
+    p_comentario: comentario ?? null,
+    p_items:     items?.length ? JSON.stringify(items) : null,
+  });
 
-  const now = new Date().toISOString();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  if (body.aprobar || body.completar) {
-    await sb().from('cotizaciones').update({
-      estado:            'aprobada',
-      respuesta_cliente: 'aprobada',
-      respondida_at:     now,
-    }).eq('id', cot.id);
-  } else if (body.rechazar) {
-    await sb().from('cotizaciones').update({
-      estado:             'rechazada',
-      respuesta_cliente:  'rechazada',
-      comentario_rechazo: body.comentario ?? null,
-      respondida_at:      now,
-    }).eq('id', cot.id);
+  const result = data as { ok?: boolean; error?: string };
+  if (result?.error) {
+    return NextResponse.json({ error: result.error }, { status: 409 });
   }
 
   return NextResponse.json({ ok: true });
