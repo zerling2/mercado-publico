@@ -45,7 +45,8 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
 
   const [compra, setCompra] = useState<CompraInfo | null>(null);
   const [rows, setRows]     = useState<CalcRow[]>([]);
-  const [comentario, setComentario] = useState('');
+  const [notasInternas, setNotasInternas] = useState('');
+  const [notasCliente, setNotasCliente]   = useState('');
   const [loading, setLoading]   = useState(true);
   const [loadMsg, setLoadMsg]   = useState('Descargando productos del portal…');
   const [error, setError]       = useState('');
@@ -63,7 +64,8 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       ]);
       if (base.error) { setError(base.error); setLoading(false); return; }
       setCompra(base.compra);
-      setComentario(base.relevancia?.comentario ?? '');
+      setNotasInternas(base.relevancia?.comentario ?? '');
+      setNotasCliente(base.notas_cliente ?? '');
       const savedMap = new Map((Array.isArray(saved) ? saved : []).map(
         (s: { compra_producto_id: string; id: string; costo: number | null; margen: number | null; precio: number | null }) =>
           [s.compra_producto_id, s]
@@ -115,17 +117,17 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       }),
       fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comentario }),
+        body: JSON.stringify({ comentario: notasInternas, notas_cliente: notasCliente }),
       }),
     ]);
     setSaving(false); setSavedMsg('Guardado ✓');
-  }, [rows, comentario, user_id, compra_codigo]);
+  }, [rows, notasInternas, notasCliente, user_id, compra_codigo]);
 
   const enviarCliente = async () => {
     await guardar();
     const res = await fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}/enviar`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notas: comentario }),
+      body: JSON.stringify({ notas: notasCliente }),
     }).then(r => r.json());
     if (res.token) setSendToken(res.token);
   };
@@ -399,15 +401,35 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
           </div>
         )}
 
-        {/* Notes */}
+        {/* Notes — two columns side by side */}
         <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
           padding: '12px 14px', marginBottom: 14 }}>
-          <label style={{ ...labelSt, display: 'block', marginBottom: 7 }}>Notas para el cliente</label>
-          <textarea value={comentario} onChange={e => setComentario(e.target.value)}
-            placeholder="Condiciones especiales, plazos, preguntas…"
-            rows={3} style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8,
-              border: `1.5px solid ${BORDER}`, padding: '9px 11px', fontSize: '0.86rem',
-              fontFamily: 'inherit', color: TEXT, resize: 'vertical', lineHeight: 1.5, outline: 'none' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ ...labelSt, display: 'block', marginBottom: 7 }}>Notas para el cliente</label>
+              <textarea
+                value={notasCliente}
+                onChange={e => setNotasCliente(e.target.value)}
+                placeholder="Condiciones, plazos, observaciones…"
+                rows={4}
+                style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8,
+                  border: `1.5px solid ${BORDER}`, padding: '9px 11px', fontSize: '0.86rem',
+                  fontFamily: 'inherit', color: TEXT, resize: 'vertical', lineHeight: 1.5, outline: 'none' }}
+              />
+            </div>
+            <div>
+              <label style={{ ...labelSt, display: 'block', marginBottom: 7 }}>Notas internas</label>
+              <textarea
+                value={notasInternas}
+                onChange={e => setNotasInternas(e.target.value)}
+                placeholder="Solo visible para el asesor…"
+                rows={4}
+                style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8,
+                  border: `1.5px solid ${BORDER}`, padding: '9px 11px', fontSize: '0.86rem',
+                  fontFamily: 'inherit', color: TEXT, resize: 'vertical', lineHeight: 1.5, outline: 'none' }}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Send token banner */}

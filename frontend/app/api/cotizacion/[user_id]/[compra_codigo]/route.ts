@@ -185,20 +185,46 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
 
   if (!compra) return NextResponse.json({ error: 'Compra no encontrada' }, { status: 404 });
 
-  const updates: Record<string, unknown> = {};
-  if ('comentario'             in body) updates.comentario             = body.comentario;
-  if ('cotizacion_descargada'  in body) updates.cotizacion_descargada  = body.cotizacion_descargada;
+  // Update relevancia_compras fields (internal data)
+  const relUpdates: Record<string, unknown> = {};
+  if ('comentario'            in body) relUpdates.comentario            = body.comentario;
+  if ('cotizacion_descargada' in body) relUpdates.cotizacion_descargada = body.cotizacion_descargada;
   if ('visto' in body) {
-    updates.visto = body.visto;
-    if (body.visto) updates.fecha_visto = new Date().toISOString();
+    relUpdates.visto = body.visto;
+    if (body.visto) relUpdates.fecha_visto = new Date().toISOString();
   }
 
-  const { error } = await sb()
-    .from('relevancia_compras')
-    .update(updates)
-    .eq('user_id', user_id)
-    .eq('compra_agil_id', compra.id);
+  if (Object.keys(relUpdates).length > 0) {
+    const { error } = await sb()
+      .from('relevancia_compras')
+      .update(relUpdates)
+      .eq('user_id', user_id)
+      .eq('compra_agil_id', compra.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Upsert cotizaciones.notas (client-facing notes)
+  if ('notas_cliente' in body) {
+    const { data: existing } = await sb()
+      .from('cotizaciones')
+      .select('id')
+      .eq('user_id', user_id)
+      .eq('compra_agil_id', compra.id)
+      .maybeSingle();
+
+    if (existing) {
+      const { error } = await sb()
+        .from('cotizaciones')
+        .update({ notas: body.notas_cliente })
+        .eq('id', existing.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    } else {
+      const { error } = await sb()
+        .from('cotizaciones')
+        .insert({ user_id, compra_agil_id: compra.id, notas: body.notas_cliente });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }
