@@ -214,16 +214,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
 
   // Mark as postulada (submitted to portal)
   if (body.postulada) {
-    const updateQ = sb().from('cotizaciones').update({
-      estado:       'postulada',
-      postulada_at: new Date().toISOString(),
-      quien_postulo: body.quien_postulo ?? 'asesor',
-    });
-    // Prefer filtering by primary key when caller provides cot_id
-    const { error: postErr } = body.cot_id
-      ? await updateQ.eq('id', body.cot_id)
-      : await updateQ.eq('user_id', user_id).eq('compra_agil_id', compra.id);
-    if (postErr) return NextResponse.json({ error: postErr.message }, { status: 500 });
+    if (body.cot_id) {
+      // Use RPC (SECURITY DEFINER) to avoid PostgREST filter issues
+      const { data: postResult, error: postErr } = await sb().rpc('marcar_postulada', {
+        p_cot_id: body.cot_id,
+        p_quien:  body.quien_postulo ?? 'asesor',
+      });
+      if (postErr) return NextResponse.json({ error: postErr.message }, { status: 500 });
+      const r = postResult as { error?: string } | null;
+      if (r?.error) return NextResponse.json({ error: r.error }, { status: 409 });
+    } else {
+      // Fallback: direct update by composite key
+      await sb().from('cotizaciones').update({
+        estado:       'postulada',
+        postulada_at: new Date().toISOString(),
+        quien_postulo: body.quien_postulo ?? 'asesor',
+      })
+      .eq('user_id', user_id)
+      .eq('compra_agil_id', compra.id);
+    }
   }
 
   // Mark final result
