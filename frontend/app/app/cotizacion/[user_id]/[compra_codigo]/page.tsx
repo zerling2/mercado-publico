@@ -323,7 +323,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
                     readOnly={!!precioAuto}
                     onChange={e => !precioAuto && updateRow(idx, 'precio', e.target.value)}
                     style={{
-                      ...inputSt(!!rows[idx].precio || precioAuto),
+                      ...inputSt(!!rows[idx].precio || !!precioAuto),
                       color: precioAuto ? BLUE : TEXT,
                       cursor: precioAuto ? 'default' : 'text',
                     }} />
