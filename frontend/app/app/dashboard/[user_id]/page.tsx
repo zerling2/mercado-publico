@@ -77,7 +77,7 @@ function fechaCorta(s: string | null) {
 }
 
 function portalUrl(codigo: string) {
-  return `https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?codigoOC=${encodeURIComponent(codigo)}`;
+  return `https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${encodeURIComponent(codigo)}`;
 }
 
 function scoreColor(score: number) {

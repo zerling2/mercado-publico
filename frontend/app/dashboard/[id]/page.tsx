@@ -91,7 +91,7 @@ export default async function CompraDetallePage({
       </div>
 
       <a
-        href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?codigoOC=${compra.codigo}`}
+        href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${compra.codigo}`}
         target="_blank"
         rel="noopener noreferrer"
         style={btnExterno}
