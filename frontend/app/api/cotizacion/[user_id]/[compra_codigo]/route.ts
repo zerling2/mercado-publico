@@ -121,10 +121,18 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
   const catalogoMap = new Map((catalogoItems ?? []).map(c => [c.id, c]));
   const matchMap    = new Map((matchings ?? []).map(m => [m.compra_producto_id, m]));
 
-  // Relevancia record (comment, visto, score)
+  // Relevancia record (internal comment, visto, score)
   const { data: rel } = await sb()
     .from('relevancia_compras')
     .select('id, comentario, visto, cotizacion_descargada, relevancia_score')
+    .eq('user_id', user_id)
+    .eq('compra_agil_id', compra.id)
+    .maybeSingle();
+
+  // Cotizacion record (client-facing notes)
+  const { data: cot } = await sb()
+    .from('cotizaciones')
+    .select('notas')
     .eq('user_id', user_id)
     .eq('compra_agil_id', compra.id)
     .maybeSingle();
@@ -161,6 +169,7 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
     },
     items,
     relevancia: rel ?? null,
+    notas_cliente: cot?.notas ?? '',
   });
 }
 
