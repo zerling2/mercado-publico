@@ -214,13 +214,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
 
   // Mark as postulada (submitted to portal)
   if (body.postulada) {
-    await sb().from('cotizaciones').update({
+    const updateQ = sb().from('cotizaciones').update({
       estado:       'postulada',
       postulada_at: new Date().toISOString(),
       quien_postulo: body.quien_postulo ?? 'asesor',
-    })
-    .eq('user_id', user_id)
-    .eq('compra_agil_id', compra.id);
+    });
+    // Prefer filtering by primary key when caller provides cot_id
+    const { error: postErr } = body.cot_id
+      ? await updateQ.eq('id', body.cot_id)
+      : await updateQ.eq('user_id', user_id).eq('compra_agil_id', compra.id);
+    if (postErr) return NextResponse.json({ error: postErr.message }, { status: 500 });
   }
 
   // Mark final result

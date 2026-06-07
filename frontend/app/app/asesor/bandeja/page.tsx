@@ -100,9 +100,10 @@ export default function AsesorBandejaPage() {
       const res = await fetch(`/api/cotizacion/${item.empresa_id}/${item.compra_codigo}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ postulada: true, quien_postulo: 'asesor' }),
+        body: JSON.stringify({ postulada: true, quien_postulo: 'asesor', cot_id: item.id }),
       });
-      if (res.ok) {
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && !json.error) {
         setItems(prev => prev.map(b => b.id === item.id ? { ...b, estado: 'postulada', postulada_at: new Date().toISOString() } : b));
         setExpanded(null);
       }
