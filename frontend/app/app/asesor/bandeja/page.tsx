@@ -48,29 +48,49 @@ export default function AsesorBandejaPage() {
   const router = useRouter();
   const [items, setItems]           = useState<BandejaItem[]>([]);
   const [loading, setLoading]       = useState(true);
+  const [apiError, setApiError]     = useState('');
   const [filtro, setFiltro]         = useState<Filtro>('todas');
   const [expanded, setExpanded]     = useState<string | null>(null);
   const [postulando, setPostulando] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('asesor_token');
     if (!token) { router.replace('/app/login'); return; }
 
-    const load = () => {
-      setLoading(true);
-      fetch('/api/asesor/bandeja', { headers: { Authorization: `Bearer ${token}` } })
+    const load = (silent = false) => {
+      if (!silent) setLoading(true);
+      setApiError('');
+      fetch('/api/asesor/bandeja', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      })
         .then(r => r.json())
-        .then(d => { if (Array.isArray(d.cotizaciones)) setItems(d.cotizaciones); })
-        .catch(() => {})
-        .finally(() => setLoading(false));
+        .then(d => {
+          if (d.error) { setApiError(d.error); return; }
+          if (Array.isArray(d.cotizaciones)) {
+            setItems(d.cotizaciones);
+            setLastUpdated(new Date());
+          }
+        })
+        .catch(e => setApiError(e.message))
+        .finally(() => { if (!silent) setLoading(false); });
     };
 
     load();
 
-    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    // Auto-refresh cada 20 segundos
+    const interval = setInterval(() => load(true), 20000);
+
+    // También al recuperar foco
+    const onVisible = () => { if (document.visibilityState === 'visible') load(true); };
     document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [router, refreshKey]);
 
   async function postular(item: BandejaItem) {
@@ -126,7 +146,13 @@ export default function AsesorBandejaPage() {
               <p style={{ margin: 0, color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem' }}>
                 {items.length} {items.length === 1 ? 'cotización' : 'cotizaciones'}
                 {aprobadas > 0 && ` · ${aprobadas} pendiente${aprobadas > 1 ? 's' : ''} de postular`}
+                {lastUpdated && ` · ${lastUpdated.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`}
               </p>
+              {apiError && (
+                <p style={{ margin: '2px 0 0', color: '#f87171', fontSize: '0.7rem' }}>
+                  Error: {apiError}
+                </p>
+              )}
             </div>
             <button
               onClick={() => setRefreshKey(k => k + 1)}
