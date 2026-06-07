@@ -102,13 +102,12 @@ async function enrichirDB(sb: ReturnType<typeof supabase>, raw: RawItem, compraI
       updated_at: new Date().toISOString(),
     }, { onConflict: 'rut', ignoreDuplicates: false });
 
-    // Increment counters via RPC (if available) or raw SQL
-    await sb.rpc('incrementar_organismo', {
-      p_rut: inst.rut,
-      p_monto: montoNum,
-    }).maybeSingle().catch(() => {
+    // Increment counters via RPC (if available)
+    try {
+      await sb.rpc('incrementar_organismo', { p_rut: inst.rut, p_monto: montoNum });
+    } catch {
       // RPC not available yet — skip counter increment
-    });
+    }
   }
 
   // 3. Save productos_solicitados → compra_productos
