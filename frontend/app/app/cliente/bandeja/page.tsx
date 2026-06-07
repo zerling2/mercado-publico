@@ -112,23 +112,28 @@ export default function ClienteBandejaPage() {
     const token = localStorage.getItem('cliente_token');
     if (!token) { router.replace('/app/cliente/login'); return; }
 
-    fetch('/api/cliente/bandeja', { headers: { Authorization: `Bearer ${token}` } })
-      .then(async r => {
-        if (r.status === 401) { localStorage.removeItem('cliente_token'); router.replace('/app/cliente/login'); return; }
-        if (r.status === 403) {
-          // Token belongs to an asesor — redirect to asesor dashboard
-          localStorage.removeItem('cliente_token');
-          router.replace('/app/dashboard');
-          return;
-        }
-        const d = await r.json();
-        if (d.error) { setError(d.error); } else { setData(d); }
-        setLoading(false);
+    const load = () => {
+      fetch('/api/cliente/bandeja', { headers: { Authorization: `Bearer ${token}` } })
+        .then(async r => {
+          if (r.status === 401) { localStorage.removeItem('cliente_token'); router.replace('/app/cliente/login'); return; }
+          if (r.status === 403) {
+            localStorage.removeItem('cliente_token');
+            router.replace('/app/dashboard');
+            return;
+          }
+          const d = await r.json();
+          if (d.error) { setError(d.error); } else { setData(d); }
+          setLoading(false);
+          subscribeToPush(token);
+        })
+        .catch(e => { setError(e.message); setLoading(false); });
+    };
 
-        // Register push in the background
-        subscribeToPush(token);
-      })
-      .catch(e => { setError(e.message); setLoading(false); });
+    load();
+
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [router]);
 
   const logout = () => {

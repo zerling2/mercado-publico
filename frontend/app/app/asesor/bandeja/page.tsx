@@ -51,17 +51,27 @@ export default function AsesorBandejaPage() {
   const [filtro, setFiltro]         = useState<Filtro>('todas');
   const [expanded, setExpanded]     = useState<string | null>(null);
   const [postulando, setPostulando] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem('asesor_token');
     if (!token) { router.replace('/app/login'); return; }
 
-    fetch('/api/asesor/bandeja', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(d => { if (Array.isArray(d.cotizaciones)) setItems(d.cotizaciones); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [router]);
+    const load = () => {
+      setLoading(true);
+      fetch('/api/asesor/bandeja', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(d => { if (Array.isArray(d.cotizaciones)) setItems(d.cotizaciones); })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    };
+
+    load();
+
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [router, refreshKey]);
 
   async function postular(item: BandejaItem) {
     setPostulando(item.id);
@@ -118,6 +128,16 @@ export default function AsesorBandejaPage() {
                 {aprobadas > 0 && ` · ${aprobadas} pendiente${aprobadas > 1 ? 's' : ''} de postular`}
               </p>
             </div>
+            <button
+              onClick={() => setRefreshKey(k => k + 1)}
+              disabled={loading}
+              style={{ background: 'rgba(255,255,255,0.12)', border: 'none', color: WHITE,
+                borderRadius: 8, padding: '6px 12px', fontSize: '0.78rem', cursor: 'pointer',
+                fontFamily: 'inherit', fontWeight: 600, flexShrink: 0,
+                opacity: loading ? 0.5 : 1 }}
+            >
+              {loading ? '…' : '↻ Actualizar'}
+            </button>
           </div>
 
           {/* Filtros */}
