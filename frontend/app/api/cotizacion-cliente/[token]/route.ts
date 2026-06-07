@@ -40,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { token: str
     p_aprobar:   (aprobar || completar) ? true : null,
     p_rechazar:  rechazar ? true : null,
     p_comentario: comentario ?? null,
-    p_items:     items?.length ? JSON.stringify(items) : null,
+    p_items:     items?.length ? items : null,
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

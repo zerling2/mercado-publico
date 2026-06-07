@@ -63,20 +63,21 @@ export default function CotizacionClientePage() {
     fetch(`/api/cotizacion-cliente/${token}`)
       .then(r => r.json())
       .then(d => {
-        if (d.error) { setError(d.error); setLoading(false); return; }
+        if (d.error) { setError(d.error); return; }
         setData(d);
         const estado = d.cot?.estado;
-        if (estado === 'aprobada') { setDone('aprobada'); setLoading(false); return; }
-        if (estado === 'rechazada') { setDone('rechazada'); setLoading(false); return; }
+        if (estado === 'aprobada')  setDone('aprobada');
+        if (estado === 'rechazada') setDone('rechazada');
+        // Rows always loaded so the user can re-open and modify
         setRows((d.items ?? []).map((it: Item) => ({
           ...it,
           costoEdit:  (it.costo_cliente  ?? it.costo)  != null ? String(it.costo_cliente  ?? it.costo)  : '',
           margenEdit: (it.margen_cliente ?? it.margen) != null ? String(it.margen_cliente ?? it.margen) : '',
           precioEdit: (it.precio_cliente ?? it.precio) != null ? String(it.precio_cliente ?? it.precio) : '',
         })));
-        setLoading(false);
       })
-      .catch(e => { setError(e.message); setLoading(false); });
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
   }, [token]);
 
   const update = useCallback((idx: number, field: 'costoEdit' | 'margenEdit' | 'precioEdit', val: string) => {
@@ -103,19 +104,34 @@ export default function CotizacionClientePage() {
 
   const aprobar = async () => {
     setSending(true);
-    await fetch(`/api/cotizacion-cliente/${token}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: buildItems(), aprobar: true }),
-    });
-    setSending(false); setDone('aprobada');
+    setError('');
+    try {
+      const res = await fetch(`/api/cotizacion-cliente/${token}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: buildItems(), aprobar: true }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) { setError(json.error ?? 'Error al aprobar'); return; }
+      setDone('aprobada');
+    } finally {
+      setSending(false);
+    }
   };
+
   const confirmarRechazo = async () => {
     setSending(true);
-    await fetch(`/api/cotizacion-cliente/${token}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rechazar: true, comentario: comentarioRechazo }),
-    });
-    setSending(false); setDone('rechazada');
+    setError('');
+    try {
+      const res = await fetch(`/api/cotizacion-cliente/${token}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rechazar: true, comentario: comentarioRechazo }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) { setError(json.error ?? 'Error al rechazar'); return; }
+      setDone('rechazada');
+    } finally {
+      setSending(false);
+    }
   };
 
   const calcRows = rows.map(r => {
@@ -138,7 +154,7 @@ export default function CotizacionClientePage() {
       Cargando cotización…
     </div>
   );
-  if (error) return (
+  if (error && !data) return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center',
       justifyContent: 'center', fontFamily: '-apple-system, sans-serif', color: RED }}>{error}</div>
   );
@@ -150,14 +166,23 @@ export default function CotizacionClientePage() {
       <div style={{ fontSize: '3.5rem' }}>✅</div>
       <h2 style={{ color: TEXT, fontWeight: 800, margin: 0 }}>¡Cotización aprobada!</h2>
       <p style={{ color: MUTED, margin: 0 }}>El asesor recibirá tu confirmación.</p>
-      <button onClick={() => router.push('/app/cliente/bandeja')}
-        style={{ marginTop: 8, height: 44, borderRadius: 10, border: 'none',
-          background: BLUE, color: WHITE, padding: '0 24px',
-          fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
-        Ver mis cotizaciones →
-      </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 320, marginTop: 8 }}>
+        <button onClick={() => router.push('/app/cliente/bandeja')}
+          style={{ height: 44, borderRadius: 10, border: 'none',
+            background: BLUE, color: WHITE, fontFamily: 'inherit',
+            fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+          Ver mis cotizaciones →
+        </button>
+        <button onClick={() => setDone(null)}
+          style={{ height: 40, borderRadius: 10, border: `1.5px solid ${BORDER}`,
+            background: WHITE, color: MUTED, fontFamily: 'inherit',
+            fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+          Modificar mi respuesta
+        </button>
+      </div>
     </div>
   );
+
   if (done === 'rechazada') return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', gap: 16,
@@ -165,12 +190,20 @@ export default function CotizacionClientePage() {
       <div style={{ fontSize: '3.5rem' }}>❌</div>
       <h2 style={{ color: TEXT, fontWeight: 800, margin: 0 }}>Cotización rechazada</h2>
       <p style={{ color: MUTED, margin: 0 }}>El asesor quedó notificado.</p>
-      <button onClick={() => router.push('/app/cliente/bandeja')}
-        style={{ marginTop: 8, height: 44, borderRadius: 10, border: 'none',
-          background: BLUE, color: WHITE, padding: '0 24px',
-          fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
-        Ver mis cotizaciones →
-      </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 320, marginTop: 8 }}>
+        <button onClick={() => router.push('/app/cliente/bandeja')}
+          style={{ height: 44, borderRadius: 10, border: 'none',
+            background: BLUE, color: WHITE, fontFamily: 'inherit',
+            fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+          Ver mis cotizaciones →
+        </button>
+        <button onClick={() => setDone(null)}
+          style={{ height: 40, borderRadius: 10, border: `1.5px solid ${BORDER}`,
+            background: WHITE, color: MUTED, fontFamily: 'inherit',
+            fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+          Modificar mi respuesta
+        </button>
+      </div>
     </div>
   );
 
@@ -239,6 +272,14 @@ export default function CotizacionClientePage() {
                 background: llenados === rows.length ? GREEN : BLUE,
                 width: `${Math.round(llenados / rows.length * 100)}%`, transition: 'width 0.3s' }} />
             </div>
+          </div>
+        )}
+
+        {/* Error inline */}
+        {error && (
+          <div style={{ background: '#FEF2F2', border: `1px solid #FCA5A5`, borderRadius: 10,
+            padding: '10px 12px', marginBottom: 12, color: RED, fontSize: '0.85rem' }}>
+            {error}
           </div>
         )}
 
