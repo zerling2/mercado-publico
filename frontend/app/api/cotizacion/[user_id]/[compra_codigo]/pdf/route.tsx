@@ -68,48 +68,59 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
     .eq('id', user_id)
     .maybeSingle();
 
-  // Load items + matchings
-  const { data: productos } = await sb()
-    .from('compra_productos')
-    .select('id, nombre, cantidad, unidad_medida')
-    .eq('compra_agil_id', compra.id);
-
-  const { data: matchings } = await sb()
-    .from('compra_matchings')
-    .select('compra_producto_id, estado, precio_sugerido, catalogo_producto_id')
+  // Load cotizacion_items (asesor-entered prices — preferred source)
+  const { data: cotItems } = await sb()
+    .from('cotizacion_items')
+    .select('id, compra_producto_id, nombre, cantidad, unidad_medida, costo, margen, precio, costo_cliente, margen_cliente, precio_cliente')
+    .eq('user_id', user_id)
     .eq('compra_agil_id', compra.id)
-    .eq('user_id', user_id);
+    .order('created_at');
 
-  const catalogoIds = matchings?.map(m => m.catalogo_producto_id).filter(Boolean) ?? [];
-  const { data: catalogoItems } = catalogoIds.length
-    ? await sb().from('catalogo_empresas').select('id, precio_base').in('id', catalogoIds)
-    : { data: [] };
-  const catalogoMap = new Map((catalogoItems ?? []).map(c => [c.id, c]));
-  const matchMap = new Map((matchings ?? []).map(m => [m.compra_producto_id, m]));
+  // Build rows — if asesor saved items via calculator, use those prices
+  let items: { nombre: string; cantidad: number; unidad: string; precio: number; total: number }[];
 
-  // Load comment
+  if (cotItems && cotItems.length > 0) {
+    items = cotItems.map(it => {
+      const precio = it.precio_cliente ?? it.precio ?? 0;
+      const cantidad = it.cantidad ?? 1;
+      return { nombre: it.nombre, cantidad, unidad: it.unidad_medida ?? 'u', precio, total: precio * cantidad };
+    });
+  } else {
+    // Fallback: use AI-matched prices from compra_matchings
+    const { data: productos } = await sb()
+      .from('compra_productos')
+      .select('id, nombre, cantidad, unidad_medida')
+      .eq('compra_agil_id', compra.id);
+
+    const { data: matchings } = await sb()
+      .from('compra_matchings')
+      .select('compra_producto_id, precio_sugerido, catalogo_producto_id')
+      .eq('compra_agil_id', compra.id)
+      .eq('user_id', user_id);
+
+    const catalogoIds = matchings?.map(m => m.catalogo_producto_id).filter(Boolean) ?? [];
+    const { data: catalogoItems } = catalogoIds.length
+      ? await sb().from('catalogo_empresas').select('id, precio_base').in('id', catalogoIds)
+      : { data: [] };
+    const catalogoMap = new Map((catalogoItems ?? []).map(c => [c.id, c]));
+    const matchMap = new Map((matchings ?? []).map(m => [m.compra_producto_id, m]));
+
+    items = (productos ?? []).map(p => {
+      const m = matchMap.get(p.id);
+      const cat = m?.catalogo_producto_id ? catalogoMap.get(m.catalogo_producto_id) : null;
+      const precio = m?.precio_sugerido ?? cat?.precio_base ?? 0;
+      const cantidad = p.cantidad ?? 1;
+      return { nombre: p.nombre, cantidad, unidad: p.unidad_medida ?? 'u', precio, total: precio * cantidad };
+    });
+  }
+
+  // Load asesor notes
   const { data: rel } = await sb()
     .from('relevancia_compras')
     .select('comentario')
     .eq('user_id', user_id)
     .eq('compra_agil_id', compra.id)
     .maybeSingle();
-
-  // Build rows
-  const items = (productos ?? []).map(p => {
-    const m = matchMap.get(p.id);
-    const cat = m?.catalogo_producto_id ? catalogoMap.get(m.catalogo_producto_id) : null;
-    const precio = m?.precio_sugerido ?? cat?.precio_base ?? 0;
-    const cantidad = p.cantidad ?? 1;
-    return {
-      nombre: p.nombre,
-      cantidad,
-      unidad: p.unidad_medida ?? 'u',
-      precio,
-      total: precio * cantidad,
-      estado: m?.estado ?? 'sin_análisis',
-    };
-  });
 
   const subtotal = items.reduce((s, r) => s + r.total, 0);
   const iva = Math.round(subtotal * 0.19);

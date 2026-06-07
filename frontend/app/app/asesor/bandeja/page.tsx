@@ -52,6 +52,7 @@ export default function AsesorBandejaPage() {
   const [filtro, setFiltro]         = useState<Filtro>('todas');
   const [expanded, setExpanded]     = useState<string | null>(null);
   const [postulando, setPostulando] = useState<string | null>(null);
+  const [postularError, setPostularError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -95,6 +96,7 @@ export default function AsesorBandejaPage() {
 
   async function postular(item: BandejaItem) {
     setPostulando(item.id);
+    setPostularError('');
     try {
       const token = localStorage.getItem('asesor_token') ?? '';
       const res = await fetch(`/api/cotizacion/${item.empresa_id}/${item.compra_codigo}`, {
@@ -106,7 +108,11 @@ export default function AsesorBandejaPage() {
       if (res.ok && !json.error) {
         setItems(prev => prev.map(b => b.id === item.id ? { ...b, estado: 'postulada', postulada_at: new Date().toISOString() } : b));
         setExpanded(null);
+      } else {
+        setPostularError(json.error ?? `Error HTTP ${res.status}`);
       }
+    } catch (e: unknown) {
+      setPostularError(e instanceof Error ? e.message : 'Error de red');
     } finally {
       setPostulando(null);
     }
@@ -350,6 +356,12 @@ export default function AsesorBandejaPage() {
                         </button>
                       )}
                     </div>
+
+                    {postularError && expanded === item.id && (
+                      <p style={{ margin: '8px 0 0', color: '#f87171', fontSize: '0.75rem', textAlign: 'center' }}>
+                        Error: {postularError}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
