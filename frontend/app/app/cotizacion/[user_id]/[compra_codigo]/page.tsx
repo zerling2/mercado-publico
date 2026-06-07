@@ -13,39 +13,32 @@ interface ItemBase {
   id: string; nombre: string; descripcion: string | null;
   cantidad: number; unidad_medida: string; precio_unitario: number | null;
 }
-
-// Calculator row: extends ItemBase with costo/margen/precio editable fields
 interface CalcRow extends ItemBase {
-  costo: string;
-  margen: string;
-  precio: string;
-  requiere_cliente: boolean;
-  saved_id?: string; // cotizacion_items row id if already saved
+  costo: string; margen: string; precio: string;
+  requiere_cliente: boolean; saved_id?: string;
+  expandDesc: boolean;
 }
 
 const BLUE = '#003DA5'; const BLUE_D = '#00297A';
-const GREEN = '#059669'; const RED = '#DC2626'; const AMBER = '#D97706';
+const GREEN = '#059669'; const AMBER = '#B45309';
 const TEXT = '#111827'; const MUTED = '#6B7280';
 const BORDER = '#E5E7EB'; const BG = '#F9FAFB'; const WHITE = '#FFFFFF';
 
 function pesos(n: number) {
   if (!n) return '—';
-  return n.toLocaleString('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 });
+  return '$' + n.toLocaleString('es-CL');
 }
 function fechaCorta(s: string | null) {
   if (!s) return '—';
   return new Date(s).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
 }
-
-function calcPrecio(costo: string, margen: string): number {
+function calcPrecio(costo: string, margen: string) {
   const c = parseFloat(costo); const m = parseFloat(margen);
-  if (!isNaN(c) && !isNaN(m)) return Math.round(c * (1 + m / 100));
-  return 0;
+  return (!isNaN(c) && !isNaN(m)) ? Math.round(c * (1 + m / 100)) : 0;
 }
-function calcMargen(costo: string, precio: string): number {
+function calcMargen(costo: string, precio: string) {
   const c = parseFloat(costo); const p = parseFloat(precio);
-  if (!isNaN(c) && c > 0 && !isNaN(p)) return Math.round((p / c - 1) * 100 * 10) / 10;
-  return 0;
+  return (!isNaN(c) && c > 0 && !isNaN(p)) ? Math.round((p / c - 1) * 100 * 10) / 10 : 0;
 }
 
 export default function CotizacionPage({ params }: { params: { user_id: string; compra_codigo: string } }) {
@@ -61,31 +54,31 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
   const [savedMsg, setSavedMsg] = useState('');
   const [sendToken, setSendToken] = useState('');
   const [copied, setCopied]     = useState(false);
+  const [infoExpanded, setInfoExpanded] = useState(false);
 
   useEffect(() => {
     async function load() {
-      setLoadMsg('Descargando productos del portal…');
       const [base, saved] = await Promise.all([
         fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`).then(r => r.json()),
         fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}/items`).then(r => r.json()),
       ]);
       if (base.error) { setError(base.error); setLoading(false); return; }
-
       setCompra(base.compra);
       setComentario(base.relevancia?.comentario ?? '');
-
-      const savedMap = new Map((Array.isArray(saved) ? saved : []).map((s: { compra_producto_id: string; id: string; costo: number | null; margen: number | null; precio: number | null; requiere_cliente: boolean }) => [s.compra_producto_id, s]));
-
+      const savedMap = new Map((Array.isArray(saved) ? saved : []).map(
+        (s: { compra_producto_id: string; id: string; costo: number | null; margen: number | null; precio: number | null; requiere_cliente: boolean }) =>
+          [s.compra_producto_id, s]
+      ));
       setRows((base.items ?? []).map((it: ItemBase) => {
         const sv = savedMap.get(it.id);
         return {
           ...it,
-          costo:            sv?.costo  != null ? String(sv.costo)  : '',
-          margen:           sv?.margen != null ? String(sv.margen) : '',
-          precio:           sv?.precio != null ? String(sv.precio) :
-                            it.precio_unitario != null ? String(it.precio_unitario) : '',
+          costo:  sv?.costo  != null ? String(sv.costo)  : '',
+          margen: sv?.margen != null ? String(sv.margen) : '',
+          precio: sv?.precio != null ? String(sv.precio) : it.precio_unitario != null ? String(it.precio_unitario) : '',
           requiere_cliente: sv?.requiere_cliente ?? false,
-          saved_id:         sv?.id,
+          saved_id: sv?.id,
+          expandDesc: false,
         };
       }));
       setLoading(false);
@@ -97,15 +90,11 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
     setRows(prev => {
       const next = [...prev];
       const r = { ...next[idx], [field]: value };
-
-      // Auto-calculate:
       if (field === 'costo' || field === 'margen') {
         if (r.costo && r.margen) r.precio = String(calcPrecio(r.costo, r.margen));
       }
       if (field === 'costo' || field === 'precio') {
-        if (r.costo && r.precio) {
-          r.margen = String(calcMargen(r.costo, r.precio));
-        }
+        if (r.costo && r.precio) r.margen = String(calcMargen(r.costo, r.precio));
       }
       next[idx] = r;
       return next;
@@ -122,19 +111,17 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       precio: r.precio ? parseFloat(r.precio) : null,
       requiere_cliente: r.requiere_cliente,
     }));
-    const [itemsRes, cotRes] = await Promise.all([
+    await Promise.all([
       fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}/items`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items }),
-      }).then(r => r.json()),
+      }),
       fetch(`/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comentario }),
-      }).then(r => r.json()),
+      }),
     ]);
-    setSaving(false);
-    if (itemsRes.error || cotRes.error) { setSavedMsg('Error al guardar'); return; }
-    setSavedMsg('Guardado ✓');
+    setSaving(false); setSavedMsg('Guardado ✓');
   }, [rows, comentario, user_id, compra_codigo]);
 
   const enviarCliente = async () => {
@@ -147,8 +134,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
   };
 
   const copyLink = async () => {
-    const url = `${window.location.origin}/app/cotizacion-cliente/${sendToken}`;
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(`${window.location.origin}/app/cotizacion-cliente/${sendToken}`);
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   };
 
@@ -160,292 +146,332 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
     window.location.href = `/api/cotizacion/${user_id}/${encodeURIComponent(compra_codigo)}/pdf`;
   };
 
-  // Totals
   const calcRows = rows.map(r => {
     const p = r.precio ? parseFloat(r.precio) : (r.costo && r.margen ? calcPrecio(r.costo, r.margen) : 0);
     const c = r.costo ? parseFloat(r.costo) : 0;
     return { ...r, precioFinal: p, costoFinal: c, totalPrecio: p * r.cantidad, totalCosto: c * r.cantidad };
   });
-  const subtotal = calcRows.reduce((s, r) => s + r.totalPrecio, 0);
-  const iva      = Math.round(subtotal * 0.19);
-  const total    = subtotal + iva;
-  const totalCosto = calcRows.reduce((s, r) => s + r.totalCosto, 0);
+  const subtotal     = calcRows.reduce((s, r) => s + r.totalPrecio, 0);
+  const totalCosto   = calcRows.reduce((s, r) => s + r.totalCosto, 0);
+  const iva          = Math.round(subtotal * 0.19);
+  const total        = subtotal + iva;
   const margenGlobal = totalCosto > 0 ? Math.round((subtotal / totalCosto - 1) * 100) : null;
+  const llenados     = calcRows.filter(r => r.precioFinal > 0).length;
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', gap: 12,
       fontFamily: '-apple-system, sans-serif', color: MUTED }}>
-      <div style={{ width: 28, height: 28, borderRadius: '50%',
+      <div style={{ width: 26, height: 26, borderRadius: '50%',
         border: `3px solid ${BORDER}`, borderTopColor: BLUE,
         animation: 'spin 0.8s linear infinite' }} />
-      <p style={{ margin: 0, fontSize: '0.85rem' }}>{loadMsg}</p>
+      <p style={{ margin: 0, fontSize: '0.83rem' }}>{loadMsg}</p>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
-
   if (error || !compra) return (
     <div style={{ minHeight: '100vh', background: BG, display: 'flex', alignItems: 'center',
-      justifyContent: 'center', fontFamily: '-apple-system, sans-serif', color: RED,
+      justifyContent: 'center', fontFamily: '-apple-system, sans-serif', color: '#DC2626',
       flexDirection: 'column', gap: 12 }}>
       <p>{error || 'No encontrada'}</p>
       <Link href={`/app/dashboard/${user_id}`} style={{ color: BLUE }}>← Volver</Link>
     </div>
   );
 
-  const inputSt = (highlight?: boolean): React.CSSProperties => ({
-    height: 34, width: '100%', boxSizing: 'border-box' as const,
-    borderRadius: 7, border: `1.5px solid ${highlight ? BLUE : BORDER}`,
-    padding: '0 8px', fontSize: '0.82rem', fontFamily: 'inherit',
-    textAlign: 'right' as const, color: TEXT,
-    background: highlight ? '#EFF6FF' : WHITE, outline: 'none',
-  });
-
   return (
     <div style={{ minHeight: '100vh', background: BG,
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif',
-      color: TEXT, maxWidth: 900, margin: '0 auto', paddingBottom: 60 }}>
+      color: TEXT, maxWidth: 640, margin: '0 auto', paddingBottom: 80 }}>
 
-      {/* Header */}
+      {/* Sticky header */}
       <header style={{ background: `linear-gradient(135deg,${BLUE_D} 0%,${BLUE} 100%)`,
-        color: WHITE, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 10,
-        position: 'sticky', top: 0, zIndex: 10 }}>
+        color: WHITE, padding: '11px 14px', position: 'sticky', top: 0, zIndex: 10,
+        display: 'flex', alignItems: 'center', gap: 10 }}>
         <Link href={`/app/dashboard/${user_id}`}
-          style={{ color: WHITE, textDecoration: 'none', padding: '5px 10px',
-            borderRadius: 6, background: 'rgba(255,255,255,0.15)', fontSize: '0.95rem' }}>
+          style={{ color: WHITE, textDecoration: 'none', padding: '5px 8px',
+            borderRadius: 6, background: 'rgba(255,255,255,0.15)', fontSize: '0.9rem', lineHeight: 1 }}>
           ←
         </Link>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700,
+          <p style={{ margin: 0, fontSize: '0.84rem', fontWeight: 700,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {compra.nombre}
-          </h1>
-          <p style={{ margin: 0, fontSize: '0.68rem', opacity: 0.6 }}>
+          </p>
+          <p style={{ margin: 0, fontSize: '0.66rem', opacity: 0.6 }}>
             {compra.organismo} · {compra.codigo}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={guardar} disabled={saving} style={{
-            height: 32, borderRadius: 7, border: `1.5px solid rgba(255,255,255,0.4)`,
-            background: 'transparent', color: WHITE, fontFamily: 'inherit',
-            fontSize: '0.78rem', fontWeight: 600, padding: '0 12px', cursor: 'pointer' }}>
-            {saving ? '…' : savedMsg || 'Guardar'}
-          </button>
-          <button onClick={descargarPDF} style={{
-            height: 32, borderRadius: 7, border: 'none',
+        <button onClick={guardar} disabled={saving}
+          style={{ height: 30, borderRadius: 6, border: '1.5px solid rgba(255,255,255,0.35)',
+            background: 'transparent', color: savedMsg ? '#6EE7B7' : WHITE, fontFamily: 'inherit',
+            fontSize: '0.75rem', fontWeight: 600, padding: '0 10px', cursor: 'pointer',
+            whiteSpace: 'nowrap' }}>
+          {saving ? '…' : savedMsg || 'Guardar'}
+        </button>
+        <button onClick={descargarPDF}
+          style={{ height: 30, borderRadius: 6, border: 'none',
             background: WHITE, color: BLUE, fontFamily: 'inherit',
-            fontSize: '0.78rem', fontWeight: 700, padding: '0 12px', cursor: 'pointer' }}>
-            PDF ↓
-          </button>
-        </div>
+            fontSize: '0.75rem', fontWeight: 700, padding: '0 10px', cursor: 'pointer' }}>
+          PDF ↓
+        </button>
       </header>
 
-      <div style={{ padding: '14px 16px' }}>
+      <div style={{ padding: '12px 14px' }}>
 
-        {/* Info card */}
+        {/* Compra info — collapsible */}
         <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
-          padding: '12px 14px', marginBottom: 14,
-          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 16px', fontSize: '0.82rem' }}>
-          <InfoRow label="Código"  value={compra.codigo} />
-          <InfoRow label="Cierre"  value={fechaCorta(compra.fecha_cierre)} />
-          {compra.region        && <InfoRow label="Región"  value={compra.region} />}
-          {compra.lugar_entrega && <InfoRow label="Entrega" value={compra.lugar_entrega} />}
-          {compra.monto_referencial
-            ? <InfoRow label="Presupuesto ref." value={pesos(compra.monto_referencial)} bold />
-            : null}
-        </div>
-
-        {/* Calculator table */}
-        <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
-          marginBottom: 14, overflow: 'hidden' }}>
-
-          {/* Column headers */}
-          <div style={{ display: 'grid',
-            gridTemplateColumns: '2fr 70px 105px 80px 105px 90px 32px',
-            gap: 6, padding: '9px 14px',
-            fontSize: '0.65rem', fontWeight: 700, color: MUTED,
-            textTransform: 'uppercase', letterSpacing: '0.05em',
-            borderBottom: `1px solid ${BORDER}`, background: BG }}>
-            <span>Producto solicitado</span>
-            <span style={{ textAlign: 'center' }}>Cant.</span>
-            <span style={{ textAlign: 'right' }}>Costo unit.</span>
-            <span style={{ textAlign: 'right' }}>Margen %</span>
-            <span style={{ textAlign: 'right' }}>Precio neto</span>
-            <span style={{ textAlign: 'right' }}>Total</span>
-            <span title="Requiere completar por el cliente" style={{ textAlign: 'center' }}>🔔</span>
-          </div>
-
-          {rows.length === 0 ? (
-            <p style={{ color: MUTED, textAlign: 'center', padding: '28px 16px', fontSize: '0.85rem', margin: 0 }}>
-              Sin productos en esta licitación.
-            </p>
-          ) : calcRows.map((r, idx) => {
-            const precioAuto = r.costo && r.margen && !r.precio;
-            const faltaPrecio = !r.precio && !(r.costo && r.margen);
-            return (
-              <div key={r.id} style={{
-                display: 'grid',
-                gridTemplateColumns: '2fr 70px 105px 80px 105px 90px 32px',
-                gap: 6, padding: '9px 14px', alignItems: 'center',
-                borderBottom: idx < rows.length - 1 ? `1px solid ${BORDER}` : 'none',
-                background: faltaPrecio ? '#FFFBEB' : WHITE,
-              }}>
-                {/* Name */}
-                <div>
-                  <p style={{ margin: 0, fontSize: '0.84rem', fontWeight: 600, color: TEXT, lineHeight: 1.3 }}>
-                    {r.nombre}
-                  </p>
-                  {r.descripcion && r.descripcion !== r.nombre && (
-                    <p style={{ margin: '1px 0 0', fontSize: '0.7rem', color: MUTED }}>{r.descripcion}</p>
-                  )}
-                </div>
-                {/* Qty */}
-                <div style={{ textAlign: 'center', fontSize: '0.84rem' }}>
-                  {r.cantidad} <span style={{ color: MUTED, fontSize: '0.72rem' }}>{r.unidad_medida}</span>
-                </div>
-                {/* Costo */}
-                <input type="number" min={0} placeholder="$ costo"
-                  value={rows[idx].costo}
-                  onChange={e => updateRow(idx, 'costo', e.target.value)}
-                  style={inputSt(!!rows[idx].costo)} />
-                {/* Margen */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                  <input type="number" min={0} max={999} placeholder="0"
-                    value={rows[idx].margen}
-                    onChange={e => updateRow(idx, 'margen', e.target.value)}
-                    style={{ ...inputSt(!!rows[idx].margen), width: '65%' }} />
-                  <span style={{ fontSize: '0.78rem', color: MUTED, flexShrink: 0 }}>%</span>
-                </div>
-                {/* Precio */}
-                <div>
-                  <input type="number" min={0} placeholder="$ precio"
-                    value={precioAuto ? String(r.precioFinal) : rows[idx].precio}
-                    readOnly={!!precioAuto}
-                    onChange={e => !precioAuto && updateRow(idx, 'precio', e.target.value)}
-                    style={{
-                      ...inputSt(!!rows[idx].precio || !!precioAuto),
-                      color: precioAuto ? BLUE : TEXT,
-                      cursor: precioAuto ? 'default' : 'text',
-                    }} />
-                  {faltaPrecio && (
-                    <p style={{ margin: '2px 0 0', fontSize: '0.62rem', color: AMBER }}>
-                      ingresa costo+margen o precio
-                    </p>
-                  )}
-                </div>
-                {/* Total */}
-                <div style={{ textAlign: 'right', fontSize: '0.84rem',
-                  fontWeight: r.totalPrecio > 0 ? 600 : 400,
-                  color: r.totalPrecio > 0 ? TEXT : MUTED }}>
-                  {r.totalPrecio > 0 ? pesos(r.totalPrecio) : '—'}
-                </div>
-                {/* Flag for client */}
-                <div style={{ textAlign: 'center' }}>
-                  <input type="checkbox" checked={rows[idx].requiere_cliente}
-                    onChange={e => updateRow(idx, 'requiere_cliente', e.target.checked)}
-                    title="Marcar para que el cliente complete el precio"
-                    style={{ width: 15, height: 15, cursor: 'pointer', accentColor: AMBER }} />
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Totals */}
-          {rows.length > 0 && (
-            <div style={{ borderTop: `2px solid ${BORDER}`, padding: '12px 14px',
-              background: BG, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              {/* Margin summary */}
+          marginBottom: 12, overflow: 'hidden' }}>
+          <button onClick={() => setInfoExpanded(v => !v)}
+            style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+              padding: '11px 14px', textAlign: 'left', display: 'flex',
+              justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <div>
-                {totalCosto > 0 && (
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: MUTED }}>
-                    Costo total: <strong>{pesos(totalCosto)}</strong>
-                    {margenGlobal != null && (
-                      <span style={{ marginLeft: 10, color: margenGlobal >= 0 ? GREEN : RED }}>
-                        Margen promedio: {margenGlobal}%
-                      </span>
-                    )}
-                  </p>
-                )}
-              </div>
-              {/* Price totals */}
-              <div style={{ minWidth: 220 }}>
-                {[
-                  { label: 'Subtotal neto', value: pesos(subtotal) },
-                  { label: 'IVA 19%',       value: pesos(iva) },
-                ].map(r => (
-                  <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between',
-                    padding: '2px 0', fontSize: '0.83rem' }}>
-                    <span style={{ color: MUTED }}>{r.label}</span>
-                    <span>{r.value}</span>
-                  </div>
-                ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between',
-                  padding: '5px 0 0', marginTop: 4, borderTop: `1px solid ${BORDER}`,
-                  fontSize: '1rem', fontWeight: 800, color: BLUE }}>
-                  <span>TOTAL</span>
-                  <span>{pesos(total)}</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: TEXT }}>
+                  {compra.organismo}
+                </span>
+                <div style={{ display: 'flex', gap: 10, marginTop: 2, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.72rem', color: MUTED }}>Cierre {fechaCorta(compra.fecha_cierre)}</span>
+                  {compra.monto_referencial && (
+                    <span style={{ fontSize: '0.72rem', color: BLUE, fontWeight: 700 }}>
+                      Presupuesto {pesos(compra.monto_referencial)}
+                    </span>
+                  )}
                 </div>
               </div>
+            </div>
+            <span style={{ color: MUTED, fontSize: '0.85rem', transition: 'transform 0.2s',
+              transform: infoExpanded ? 'rotate(180deg)' : 'none' }}>⌄</span>
+          </button>
+          {infoExpanded && (
+            <div style={{ borderTop: `1px solid ${BORDER}`, padding: '10px 14px',
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: '0.78rem' }}>
+              <Row label="Código"  val={compra.codigo} />
+              <Row label="Región"  val={compra.region ?? '—'} />
+              {compra.lugar_entrega && <Row label="Entrega" val={compra.lugar_entrega} full />}
+              {compra.plazo_entrega_dias && <Row label="Plazo" val={`${compra.plazo_entrega_dias} días`} />}
             </div>
           )}
         </div>
 
-        {/* Comment */}
+        {/* Progress bar */}
+        {rows.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between',
+              fontSize: '0.72rem', color: MUTED, marginBottom: 4 }}>
+              <span>{llenados} de {rows.length} productos con precio</span>
+              <span>{Math.round(llenados / rows.length * 100)}%</span>
+            </div>
+            <div style={{ height: 4, background: BORDER, borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ height: '100%', borderRadius: 99, background: llenados === rows.length ? GREEN : BLUE,
+                width: `${Math.round(llenados / rows.length * 100)}%`, transition: 'width 0.3s' }} />
+            </div>
+          </div>
+        )}
+
+        {/* Product cards */}
+        {rows.length === 0 ? (
+          <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
+            padding: '28px 16px', textAlign: 'center' }}>
+            <p style={{ color: MUTED, fontSize: '0.85rem', margin: 0 }}>Sin productos en esta licitación.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+            {calcRows.map((r, idx) => {
+              const precioAuto  = !!(r.costo && r.margen && !rows[idx].precio);
+              const faltaPrecio = !r.precioFinal;
+              const descLarga   = (r.descripcion ?? '').length > 60;
+
+              return (
+                <div key={r.id} style={{
+                  background: WHITE, borderRadius: 12,
+                  border: `1px solid ${faltaPrecio ? '#FCD34D' : BORDER}`,
+                  overflow: 'hidden',
+                }}>
+                  {/* Product header */}
+                  <div style={{ padding: '11px 14px 8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'flex-start', gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: TEXT, lineHeight: 1.3 }}>
+                          {r.nombre}
+                        </p>
+                        {r.descripcion && r.descripcion !== r.nombre && (
+                          <div style={{ marginTop: 3 }}>
+                            <p style={{ margin: 0, fontSize: '0.73rem', color: MUTED, lineHeight: 1.4,
+                              overflow: rows[idx].expandDesc ? 'visible' : 'hidden',
+                              display: rows[idx].expandDesc ? 'block' : '-webkit-box',
+                              WebkitLineClamp: rows[idx].expandDesc ? undefined : 2,
+                              WebkitBoxOrient: 'vertical' as const,
+                            }}>
+                              {r.descripcion}
+                            </p>
+                            {descLarga && (
+                              <button onClick={() => updateRow(idx, 'expandDesc', !rows[idx].expandDesc)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer',
+                                  color: BLUE, fontSize: '0.7rem', padding: '2px 0', fontWeight: 600 }}>
+                                {rows[idx].expandDesc ? 'Ver menos ↑' : 'Ver más ↓'}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {/* Qty + total */}
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700,
+                          color: r.totalPrecio > 0 ? TEXT : MUTED }}>
+                          {r.totalPrecio > 0 ? pesos(r.totalPrecio) : '—'}
+                        </p>
+                        <p style={{ margin: '2px 0 0', fontSize: '0.7rem', color: MUTED }}>
+                          {r.cantidad} {r.unidad_medida}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Input row */}
+                  <div style={{ padding: '0 14px 11px',
+                    display: 'grid', gridTemplateColumns: '1fr 80px 1fr 26px',
+                    gap: 7, alignItems: 'center' }}>
+                    {/* Costo */}
+                    <div>
+                      <label style={labelSt}>Costo unit.</label>
+                      <input type="number" min={0} placeholder="$"
+                        value={rows[idx].costo}
+                        onChange={e => updateRow(idx, 'costo', e.target.value)}
+                        style={inpSt(!!rows[idx].costo)} />
+                    </div>
+                    {/* Margen */}
+                    <div>
+                      <label style={labelSt}>Margen</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <input type="number" min={0} max={999} placeholder="0"
+                          value={rows[idx].margen}
+                          onChange={e => updateRow(idx, 'margen', e.target.value)}
+                          style={{ ...inpSt(!!rows[idx].margen), textAlign: 'center' }} />
+                        <span style={{ fontSize: '0.75rem', color: MUTED, flexShrink: 0 }}>%</span>
+                      </div>
+                    </div>
+                    {/* Precio */}
+                    <div>
+                      <label style={labelSt}>
+                        Precio neto {precioAuto && <span style={{ color: BLUE }}>·auto</span>}
+                      </label>
+                      <input type="number" min={0} placeholder="$"
+                        value={precioAuto ? String(r.precioFinal) : rows[idx].precio}
+                        readOnly={precioAuto}
+                        onChange={e => { if (!precioAuto) updateRow(idx, 'precio', e.target.value); }}
+                        style={{
+                          ...inpSt(!!(rows[idx].precio || precioAuto)),
+                          color: precioAuto ? BLUE : TEXT,
+                          cursor: precioAuto ? 'default' : 'text',
+                        }} />
+                    </div>
+                    {/* Flag */}
+                    <div style={{ paddingTop: 16, textAlign: 'center' }}>
+                      <input type="checkbox" checked={rows[idx].requiere_cliente}
+                        onChange={e => updateRow(idx, 'requiere_cliente', e.target.checked)}
+                        title="El cliente debe completar este precio"
+                        style={{ width: 16, height: 16, cursor: 'pointer', accentColor: AMBER }} />
+                    </div>
+                  </div>
+
+                  {/* Flag label */}
+                  {rows[idx].requiere_cliente && (
+                    <div style={{ background: '#FFFBEB', borderTop: `1px solid #FCD34D`,
+                      padding: '5px 14px', fontSize: '0.7rem', color: AMBER, fontWeight: 600 }}>
+                      🔔 El cliente completará este precio
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Totals card */}
+        {rows.length > 0 && (
+          <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
+            padding: '12px 14px', marginBottom: 12 }}>
+            {totalCosto > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between',
+                paddingBottom: 8, marginBottom: 8, borderBottom: `1px solid ${BORDER}` }}>
+                <span style={{ fontSize: '0.78rem', color: MUTED }}>Costo total</span>
+                <span style={{ fontSize: '0.78rem', color: TEXT, fontWeight: 600 }}>{pesos(totalCosto)}</span>
+                {margenGlobal != null && (
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700,
+                    color: margenGlobal >= 20 ? GREEN : margenGlobal >= 10 ? AMBER : '#DC2626' }}>
+                    Margen {margenGlobal}%
+                  </span>
+                )}
+              </div>
+            )}
+            {[
+              { label: 'Subtotal neto', val: pesos(subtotal), bold: false },
+              { label: 'IVA 19%',       val: pesos(iva),      bold: false },
+              { label: 'TOTAL',         val: pesos(total),    bold: true  },
+            ].map(r => (
+              <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between',
+                padding: '3px 0', fontSize: r.bold ? '1rem' : '0.84rem',
+                fontWeight: r.bold ? 800 : 400, color: r.bold ? BLUE : TEXT }}>
+                <span style={{ color: r.bold ? BLUE : MUTED }}>{r.label}</span>
+                <span>{r.val}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Notes */}
         <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
-          padding: '14px', marginBottom: 16 }}>
-          <label style={{ display: 'block', marginBottom: 7, fontSize: '0.7rem',
-            fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Notas para el cliente
-          </label>
+          padding: '12px 14px', marginBottom: 14 }}>
+          <label style={{ ...labelSt, display: 'block', marginBottom: 7 }}>Notas para el cliente</label>
           <textarea value={comentario} onChange={e => setComentario(e.target.value)}
-            placeholder="Condiciones especiales, plazos, preguntas que deba responder el cliente…"
+            placeholder="Condiciones especiales, plazos, preguntas…"
             rows={3} style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8,
-              border: `1.5px solid ${BORDER}`, padding: '10px 12px', fontSize: '0.87rem',
+              border: `1.5px solid ${BORDER}`, padding: '9px 11px', fontSize: '0.86rem',
               fontFamily: 'inherit', color: TEXT, resize: 'vertical', lineHeight: 1.5, outline: 'none' }} />
         </div>
 
         {/* Send token banner */}
         {sendToken && (
           <div style={{ background: '#ECFDF5', border: `1.5px solid #6EE7B7`, borderRadius: 12,
-            padding: '14px 16px', marginBottom: 16, display: 'flex',
-            justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            padding: '12px 14px', marginBottom: 14,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
             <div>
-              <p style={{ margin: '0 0 2px', fontWeight: 700, color: '#065F46', fontSize: '0.88rem' }}>
-                ¡Cotización lista para enviar!
+              <p style={{ margin: '0 0 2px', fontWeight: 700, color: '#065F46', fontSize: '0.85rem' }}>
+                ¡Lista para enviar!
               </p>
-              <p style={{ margin: 0, color: '#047857', fontSize: '0.78rem' }}>
-                Copia el link y compártelo con el cliente por WhatsApp o email.
+              <p style={{ margin: 0, color: '#047857', fontSize: '0.75rem' }}>
+                Comparte el link con el cliente por WhatsApp o email.
               </p>
             </div>
-            <button onClick={copyLink} style={{
-              height: 36, borderRadius: 8, border: 'none', cursor: 'pointer', flexShrink: 0,
-              background: GREEN, color: WHITE, fontFamily: 'inherit',
-              fontSize: '0.82rem', fontWeight: 700, padding: '0 16px' }}>
-              {copied ? 'Copiado ✓' : 'Copiar link'}
+            <button onClick={copyLink} style={{ height: 34, borderRadius: 8, border: 'none',
+              cursor: 'pointer', flexShrink: 0, background: GREEN, color: WHITE,
+              fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, padding: '0 14px' }}>
+              {copied ? '¡Copiado!' : 'Copiar link'}
             </button>
           </div>
         )}
 
-        {/* Action buttons */}
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={enviarCliente} style={{
-            flex: 1, height: 48, borderRadius: 12, border: 'none', cursor: 'pointer',
-            background: BLUE, color: WHITE, fontFamily: 'inherit',
-            fontSize: '0.92rem', fontWeight: 700 }}>
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={enviarCliente} style={{ flex: 1, height: 46, borderRadius: 11,
+            border: 'none', cursor: 'pointer', background: BLUE, color: WHITE,
+            fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 700 }}>
             Enviar al cliente →
           </button>
-          <button onClick={descargarPDF} style={{
-            height: 48, borderRadius: 12, border: `1.5px solid ${BLUE}`,
-            background: WHITE, color: BLUE, fontFamily: 'inherit',
-            fontSize: '0.88rem', fontWeight: 600, padding: '0 18px', cursor: 'pointer' }}>
+          <button onClick={descargarPDF} style={{ height: 46, borderRadius: 11,
+            border: `1.5px solid ${BLUE}`, background: WHITE, color: BLUE,
+            fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 600,
+            padding: '0 14px', cursor: 'pointer' }}>
             PDF ↓
           </button>
           <a href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${encodeURIComponent(compra.codigo)}`}
             target="_blank" rel="noopener noreferrer"
-            style={{ height: 48, borderRadius: 12, border: `1.5px solid ${BORDER}`,
-              background: WHITE, color: MUTED, fontFamily: 'inherit', fontSize: '0.85rem',
-              fontWeight: 600, padding: '0 16px', display: 'inline-flex', alignItems: 'center',
-              textDecoration: 'none' }}>
+            style={{ height: 46, borderRadius: 11, border: `1.5px solid ${BORDER}`,
+              background: WHITE, color: MUTED, fontFamily: 'inherit', fontSize: '0.82rem',
+              fontWeight: 600, padding: '0 12px', display: 'inline-flex',
+              alignItems: 'center', textDecoration: 'none' }}>
             Portal ↗
           </a>
         </div>
@@ -454,11 +480,25 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
   );
 }
 
-function InfoRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+const labelSt: React.CSSProperties = {
+  display: 'block', marginBottom: 3,
+  fontSize: '0.64rem', fontWeight: 700, color: MUTED,
+  textTransform: 'uppercase', letterSpacing: '0.04em',
+};
+
+const inpSt = (filled: boolean): React.CSSProperties => ({
+  height: 36, width: '100%', boxSizing: 'border-box' as const,
+  borderRadius: 8, border: `1.5px solid ${filled ? BLUE : BORDER}`,
+  padding: '0 9px', fontSize: '0.85rem', fontFamily: 'inherit',
+  textAlign: 'right' as const, color: TEXT,
+  background: filled ? '#EFF6FF' : '#FAFAFA', outline: 'none',
+});
+
+function Row({ label, val, full }: { label: string; val: string; full?: boolean }) {
   return (
-    <div style={{ display: 'flex', gap: 6 }}>
-      <span style={{ color: MUTED, fontSize: '0.78rem', minWidth: 80, flexShrink: 0 }}>{label}</span>
-      <span style={{ color: '#111827', fontSize: '0.82rem', fontWeight: bold ? 700 : 400 }}>{value}</span>
+    <div style={{ gridColumn: full ? '1 / -1' : undefined, display: 'flex', gap: 6 }}>
+      <span style={{ color: MUTED, minWidth: 56, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: TEXT, fontWeight: 400 }}>{val}</span>
     </div>
   );
 }
