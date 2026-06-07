@@ -38,12 +38,14 @@ export async function GET(req: NextRequest) {
     .eq('id', empresa_id)
     .maybeSingle();
 
-  const { data: cotizaciones } = await sb()
+  const { data: cotizaciones, error: cotError } = await sb()
     .from('cotizaciones')
     .select('id, token, estado, enviada_at, respondida_at, postulada_at, notas, compra_agil_id')
     .eq('user_id', empresa_id)
     .neq('estado', 'borrador')
     .order('enviada_at', { ascending: false });
+
+  if (cotError) return NextResponse.json({ error: cotError.message }, { status: 500 });
 
   if (!cotizaciones?.length) {
     return NextResponse.json({ empresa, cotizaciones: [] });
