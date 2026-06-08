@@ -415,9 +415,8 @@ export default function CategoriasBrowsePage() {
                   const dias    = diasRestantes(lic.fecha_cierre);
                   const cerrada = dias != null && dias < 0;
                   const urgente = dias != null && dias >= 0 && dias <= 3;
-                  const titulo  = lic.nombre.toLowerCase().replace(/(?:^|\s)\S/g, c => c.toUpperCase());
-                  const meta    = [
-                    lic.organismo_nombre,
+                  const detalle = [
+                    lic.codigo,
                     pesos(lic.monto),
                     fechaCorta(lic.fecha_cierre),
                   ].filter(Boolean).join(' · ');
@@ -428,7 +427,7 @@ export default function CategoriasBrowsePage() {
                       onMouseEnter={() => setHovered(lic.id)}
                       onMouseLeave={() => setHovered(null)}
                       style={{
-                        padding: '10px 12px',
+                        padding: '9px 12px',
                         borderBottom: i < licitaciones.length - 1 ? `1px solid ${BORDER}` : 'none',
                         cursor: 'pointer',
                         background: hovered === lic.id ? BG_HOVER : WHITE,
@@ -437,16 +436,17 @@ export default function CategoriasBrowsePage() {
                       }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{
-                          margin: 0, color: TEXT, fontWeight: 600, fontSize: '0.82rem',
+                          margin: 0, color: TEXT, fontWeight: 700, fontSize: '0.82rem',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
-                          {titulo}
+                          {lic.organismo_nombre ?? '—'}
                         </p>
                         <p style={{
-                          margin: '2px 0 0', color: TEXT_MUTED, fontSize: '0.7rem',
+                          margin: '2px 0 0', color: TEXT_MUTED, fontSize: '0.68rem',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          letterSpacing: '0.01em',
                         }}>
-                          {meta}
+                          {detalle}
                         </p>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
