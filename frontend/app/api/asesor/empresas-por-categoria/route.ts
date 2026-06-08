@@ -53,20 +53,13 @@ export async function GET(req: NextRequest) {
   // Sincronizar empresa_categorias para estas empresas
   await sincronizar(empresaIds);
 
-  // Consultar conteo de empresas por categoría
+  // Devolver el detalle completo empresa × categoría para filtrado client-side
   const { data: rows } = await sb()
     .from('empresa_categorias')
-    .select('categoria_id, empresa_id')
+    .select('empresa_id, categoria_id')
     .in('empresa_id', empresaIds);
 
-  // Agrupar: { categoria_id → Set<empresa_id> }
-  const counts: Record<string, number> = {};
-  for (const row of rows ?? []) {
-    if (!counts[row.categoria_id]) counts[row.categoria_id] = 0;
-    counts[row.categoria_id]++;
-  }
-
-  return NextResponse.json(counts);
+  return NextResponse.json(rows ?? []);
 }
 
 async function sincronizar(empresaIds: string[]) {
