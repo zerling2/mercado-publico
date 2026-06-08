@@ -64,6 +64,8 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
   const [saving, setSaving]               = useState(false);
   const [savedMsg, setSavedMsg]           = useState('');
   const [infoExpanded, setInfoExpanded]   = useState(false);
+  const [docs, setDocs]                   = useState<{ nombre: string; url: string; tipo: string }[] | null>(null);
+  const [docsLoading, setDocsLoading]     = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -172,6 +174,21 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
     setCotizacion(base.cotizacion ?? null);
   };
 
+  const toggleInfo = useCallback(async () => {
+    const next = !infoExpanded;
+    setInfoExpanded(next);
+    if (next && docs === null && !docsLoading) {
+      setDocsLoading(true);
+      try {
+        const d = await fetch(`/api/compras-agiles/${encodeURIComponent(compra_codigo)}`).then(r => r.json());
+        setDocs(Array.isArray(d.documentos) ? d.documentos : []);
+      } catch {
+        setDocs([]);
+      }
+      setDocsLoading(false);
+    }
+  }, [infoExpanded, docs, docsLoading, compra_codigo]);
+
   const calcRows = rows.map(r => {
     const p = r.precio ? parseFloat(r.precio) : (r.costo && r.margen ? calcPrecio(r.costo, r.margen) : 0);
     const c = r.costo ? parseFloat(r.costo) : 0;
@@ -231,15 +248,6 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
             {compra.organismo} · {compra.codigo}
           </p>
         </div>
-        <a href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${encodeURIComponent(compra.codigo)}`}
-          target="_blank" rel="noopener noreferrer"
-          style={{ height: 30, borderRadius: 6,
-            background: 'rgba(255,255,255,0.15)', color: WHITE,
-            fontSize: '0.75rem', fontWeight: 700, padding: '0 10px',
-            display: 'flex', alignItems: 'center', textDecoration: 'none',
-            whiteSpace: 'nowrap' }}>
-          MP ↗
-        </a>
         <button onClick={todosPreciados ? descargarPDF : undefined}
           title={todosPreciados ? undefined : 'Completa todos los precios para generar el PDF'}
           style={{ height: 30, borderRadius: 6, border: 'none',
@@ -338,7 +346,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
         {/* Compra info — collapsible */}
         <div style={{ background: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`,
           marginBottom: 12, overflow: 'hidden' }}>
-          <button onClick={() => setInfoExpanded(v => !v)}
+          <button onClick={toggleInfo}
             style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer',
               padding: '11px 14px', textAlign: 'left', display: 'flex',
               justifyContent: 'space-between', alignItems: 'center' }}>
@@ -367,22 +375,37 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
               <Row label="Región"  val={compra.region ?? '—'} />
               {compra.lugar_entrega && <Row label="Entrega" val={compra.lugar_entrega} full />}
               {compra.plazo_entrega_dias && <Row label="Plazo" val={`${compra.plazo_entrega_dias} días`} />}
-              <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
-                <a href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${encodeURIComponent(compra.codigo)}`}
-                  target="_blank" rel="noopener noreferrer"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    color: BLUE, fontWeight: 700, fontSize: '0.78rem', textDecoration: 'none',
-                    background: '#EEF3FF', borderRadius: 8, padding: '6px 12px',
-                  }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                    <polyline points="15 3 21 3 21 9"/>
-                    <line x1="10" y1="14" x2="21" y2="3"/>
-                  </svg>
-                  Ver bases técnicas en Mercado Público
-                </a>
+              <div style={{ gridColumn: '1 / -1', marginTop: 8 }}>
+                <p style={{ margin: '0 0 6px', fontSize: '0.7rem', fontWeight: 700,
+                  color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Documentos
+                </p>
+                {docsLoading && (
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: MUTED }}>Cargando documentos…</p>
+                )}
+                {!docsLoading && docs !== null && docs.length === 0 && (
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: MUTED }}>Sin documentos adjuntos.</p>
+                )}
+                {!docsLoading && docs !== null && docs.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {docs.map((doc, i) => (
+                      <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'flex', alignItems: 'center', gap: 6,
+                          color: BLUE, fontSize: '0.8rem', textDecoration: 'none',
+                          background: '#EEF3FF', borderRadius: 8, padding: '7px 10px' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" strokeWidth="2.2"
+                          strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                          <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {doc.nombre}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
