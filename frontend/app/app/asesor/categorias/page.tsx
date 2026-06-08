@@ -31,6 +31,10 @@ function diasRestantes(fecha: string | null): number | null {
   if (!fecha) return null;
   return Math.ceil((new Date(fecha).getTime() - Date.now()) / 86400000);
 }
+function fechaCorta(s: string | null) {
+  if (!s) return null;
+  return new Date(s).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' });
+}
 function pesos(n: number | null) {
   if (!n) return null;
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -411,6 +415,12 @@ export default function CategoriasBrowsePage() {
                   const dias    = diasRestantes(lic.fecha_cierre);
                   const cerrada = dias != null && dias < 0;
                   const urgente = dias != null && dias >= 0 && dias <= 3;
+                  const titulo  = lic.nombre.toLowerCase().replace(/(?:^|\s)\S/g, c => c.toUpperCase());
+                  const meta    = [
+                    lic.organismo_nombre,
+                    pesos(lic.monto),
+                    fechaCorta(lic.fecha_cierre),
+                  ].filter(Boolean).join(' · ');
                   return (
                     <div
                       key={lic.id}
@@ -418,34 +428,39 @@ export default function CategoriasBrowsePage() {
                       onMouseEnter={() => setHovered(lic.id)}
                       onMouseLeave={() => setHovered(null)}
                       style={{
-                        padding: '11px 12px',
+                        padding: '10px 12px',
                         borderBottom: i < licitaciones.length - 1 ? `1px solid ${BORDER}` : 'none',
                         cursor: 'pointer',
                         background: hovered === lic.id ? BG_HOVER : WHITE,
                         transition: 'background 0.1s',
+                        display: 'flex', alignItems: 'center', gap: 8,
                       }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                        <p style={{ margin: 0, color: TEXT, fontWeight: 600, fontSize: '0.83rem', lineHeight: 1.4, flex: 1 }}>
-                          {lic.nombre}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{
+                          margin: 0, color: TEXT, fontWeight: 600, fontSize: '0.82rem',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {titulo}
                         </p>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                          {dias != null && (
-                            <span style={{
-                              fontSize: '0.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99,
-                              background: cerrada ? '#F3F4F6' : urgente ? '#FEF2F2' : GREEN_LIGHT,
-                              color:      cerrada ? TEXT_MUTED  : urgente ? '#DC2626' : GREEN,
-                            }}>
-                              {cerrada ? 'Cerrada' : dias === 0 ? 'Hoy' : `${dias}d`}
-                            </span>
-                          )}
-                          <ChevronRight />
-                        </div>
+                        <p style={{
+                          margin: '2px 0 0', color: TEXT_MUTED, fontSize: '0.7rem',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {meta}
+                        </p>
                       </div>
-                      <p style={{ margin: '3px 0 0', color: TEXT_MUTED, fontSize: '0.72rem', lineHeight: 1.4 }}>
-                        {lic.organismo_nombre ?? '—'}
-                        {lic.region   ? ` · ${lic.region}`   : ''}
-                        {pesos(lic.monto) ? ` · ${pesos(lic.monto)}` : ''}
-                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                        {dias != null && (
+                          <span style={{
+                            fontSize: '0.66rem', fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+                            background: cerrada ? '#F3F4F6' : urgente ? '#FEF2F2' : GREEN_LIGHT,
+                            color:      cerrada ? TEXT_MUTED  : urgente ? '#DC2626' : GREEN,
+                          }}>
+                            {cerrada ? 'Cerrada' : dias === 0 ? 'Hoy' : `${dias}d`}
+                          </span>
+                        )}
+                        <ChevronRight />
+                      </div>
                     </div>
                   );
                 })}
