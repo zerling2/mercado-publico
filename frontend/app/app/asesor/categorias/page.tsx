@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 
 const BLUE        = '#0047CC';
@@ -22,6 +22,7 @@ interface Licitacion {
   id: string; codigo: string; nombre: string;
   organismo_nombre: string | null; monto: number | null;
   region: string | null; fecha_cierre: string | null; estado: string | null;
+  relevante?: boolean;
 }
 interface Empresa { id: string; empresa_nombre: string; rut?: string; }
 interface EmpCatLink { empresa_id: string; categoria_id: string; }
@@ -183,6 +184,7 @@ export default function CategoriasBrowsePage() {
     const params = cat.id === 'otros'
       ? new URLSearchParams({ otros: 'true', limite: '500' })
       : new URLSearchParams({ keywords: cat.keywords.join(','), limite: '200' });
+    if (selEmpresas.size > 0) params.set('empresa_ids', [...selEmpresas].join(','));
     const d = await fetch(`/api/licitaciones-categoria?${params}`).then(r => r.json());
     const result = (Array.isArray(d) ? d : []).filter(
       (l: Licitacion) => !l.fecha_cierre || new Date(l.fecha_cierre) > new Date()
@@ -382,50 +384,80 @@ export default function CategoriasBrowsePage() {
               </p>
             ) : (
               <div style={{ margin: '0 16px' }}>
-                {licitaciones.map((lic, i) => {
-                  const dias    = diasRestantes(lic.fecha_cierre);
-                  const cerrada = dias != null && dias < 0;
-                  const urgente = dias != null && dias >= 0 && dias <= 3;
-                  return (
-                    <div key={lic.id}
-                      onClick={() => abrirLicitacion(lic.codigo)}
-                      onMouseEnter={() => setHovered(lic.id)}
-                      onMouseLeave={() => setHovered(null)}
-                      style={{
-                        padding: '11px 0',
-                        borderBottom: i < licitaciones.length - 1 ? `1px solid ${BORDER}` : 'none',
-                        cursor: 'pointer',
-                        background: hovered === lic.id ? BG_HOVER : 'transparent',
-                        borderRadius: 6, transition: 'background 0.1s',
-                      }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                        <p style={{ margin: 0, color: TEXT, fontWeight: 600, fontSize: '0.83rem', lineHeight: 1.4, flex: 1 }}>
-                          {lic.nombre}
-                        </p>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                          {dias != null && (
-                            <span style={{
-                              fontSize: '0.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99,
-                              background: cerrada ? '#F3F4F6' : urgente ? '#FEF2F2' : GREEN_LIGHT,
-                              color:      cerrada ? TEXT_MUTED  : urgente ? '#DC2626' : GREEN,
-                            }}>
-                              {cerrada ? 'Cerrada' : dias === 0 ? 'Hoy' : `${dias}d`}
+                {(() => {
+                  const hayRelevantes = filtroActivo && licitaciones.some(l => l.relevante);
+                  return licitaciones.map((lic, i) => {
+                    const dias    = diasRestantes(lic.fecha_cierre);
+                    const cerrada = dias != null && dias < 0;
+                    const urgente = dias != null && dias >= 0 && dias <= 3;
+                    const esMatch = filtroActivo && lic.relevante;
+                    const showSeparator = hayRelevantes && filtroActivo && !lic.relevante &&
+                      (i === 0 || licitaciones[i - 1]?.relevante === true);
+                    return (
+                      <React.Fragment key={lic.id}>
+                        {showSeparator && (
+                          <div style={{
+                            padding: '8px 0 6px',
+                            borderBottom: `1px solid ${BORDER}`,
+                            display: 'flex', alignItems: 'center', gap: 6,
+                          }}>
+                            <span style={{ fontSize: '0.67rem', fontWeight: 700, color: TEXT_MUTED,
+                              textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                              Otras en esta categoría
                             </span>
-                          )}
-                          <ChevronRight />
+                          </div>
+                        )}
+                        <div
+                          onClick={() => abrirLicitacion(lic.codigo)}
+                          onMouseEnter={() => setHovered(lic.id)}
+                          onMouseLeave={() => setHovered(null)}
+                          style={{
+                            padding: '11px 0',
+                            borderBottom: i < licitaciones.length - 1 ? `1px solid ${BORDER}` : 'none',
+                            cursor: 'pointer',
+                            background: hovered === lic.id ? BG_HOVER : 'transparent',
+                            borderRadius: 6, transition: 'background 0.1s',
+                          }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              {esMatch && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                                  <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
+                                  <span style={{ fontSize: '0.64rem', fontWeight: 700, color: GREEN, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                                    Match con tu cartera
+                                  </span>
+                                </div>
+                              )}
+                              <p style={{ margin: 0, color: TEXT, fontWeight: esMatch ? 700 : 600, fontSize: '0.83rem', lineHeight: 1.4 }}>
+                                {lic.nombre}
+                              </p>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                              {dias != null && (
+                                <span style={{
+                                  fontSize: '0.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                                  background: cerrada ? '#F3F4F6' : urgente ? '#FEF2F2' : GREEN_LIGHT,
+                                  color:      cerrada ? TEXT_MUTED  : urgente ? '#DC2626' : GREEN,
+                                }}>
+                                  {cerrada ? 'Cerrada' : dias === 0 ? 'Hoy' : `${dias}d`}
+                                </span>
+                              )}
+                              <ChevronRight />
+                            </div>
+                          </div>
+                          <p style={{ margin: '3px 0 0', color: TEXT_MUTED, fontSize: '0.72rem' }}>
+                            {lic.organismo_nombre ?? '—'}
+                            {lic.region ? ` · ${lic.region}` : ''}
+                            {pesos(lic.monto) ? ` · ${pesos(lic.monto)}` : ''}
+                          </p>
+                          <p style={{ margin: '2px 0 0', color: '#9CA3AF', fontSize: '0.65rem', fontFamily: 'monospace' }}>
+                            {lic.codigo}
+                          </p>
                         </div>
-                      </div>
-                      <p style={{ margin: '3px 0 0', color: TEXT_MUTED, fontSize: '0.72rem' }}>
-                        {lic.organismo_nombre ?? '—'}
-                        {lic.region ? ` · ${lic.region}` : ''}
-                        {pesos(lic.monto) ? ` · ${pesos(lic.monto)}` : ''}
-                      </p>
-                      <p style={{ margin: '2px 0 0', color: '#9CA3AF', fontSize: '0.65rem', fontFamily: 'monospace' }}>
-                        {lic.codigo}
-                      </p>
-                    </div>
-                  );
-                })}
+                      </React.Fragment>
+                    );
+                  });
+                })()}
               </div>
             )}
           </>

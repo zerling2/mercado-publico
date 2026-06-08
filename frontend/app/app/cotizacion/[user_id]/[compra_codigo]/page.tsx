@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface CompraInfo {
   id: string; codigo: string; nombre: string; organismo: string;
@@ -53,6 +53,7 @@ function calcMargen(costo: string, precio: string) {
 
 export default function CotizacionPage({ params }: { params: { user_id: string; compra_codigo: string } }) {
   const { user_id, compra_codigo } = params;
+  const router = useRouter();
 
   const [compra, setCompra]               = useState<CompraInfo | null>(null);
   const [rows, setRows]                   = useState<CalcRow[]>([]);
@@ -221,7 +222,7 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       justifyContent: 'center', fontFamily: '-apple-system, sans-serif', color: RED,
       flexDirection: 'column', gap: 12 }}>
       <p>{error || 'No encontrada'}</p>
-      <Link href={`/app/dashboard/${user_id}`} style={{ color: BLUE }}>← Volver</Link>
+      <button onClick={() => router.back()} style={{ color: BLUE, background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.9rem' }}>← Volver</button>
     </div>
   );
 
@@ -234,11 +235,11 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
       <header style={{ background: `linear-gradient(135deg,${BLUE_D} 0%,${BLUE} 100%)`,
         color: WHITE, padding: '11px 14px', position: 'sticky', top: 0, zIndex: 10,
         display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Link href={`/app/dashboard/${user_id}`}
-          style={{ color: WHITE, textDecoration: 'none', padding: '5px 8px',
+        <button onClick={() => router.back()}
+          style={{ color: WHITE, border: 'none', cursor: 'pointer', padding: '5px 8px', fontFamily: 'inherit',
             borderRadius: 6, background: 'rgba(255,255,255,0.15)', fontSize: '0.9rem', lineHeight: 1 }}>
           ←
-        </Link>
+        </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: '0.84rem', fontWeight: 700,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
