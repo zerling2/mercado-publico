@@ -21,62 +21,170 @@ const CATEGORIAS = [
   {
     id: 'impresion',
     nombre: 'Impresión y gráfica',
-    keywords: ['impresion', 'impreso', 'imprimir', 'folleto', 'folleteria', 'afiche', 'diptico', 'triptico', 'pendon', 'banner', 'señaletica'],
+    keywords: [
+      'impresion', 'impreso', 'imprimir', 'folleto', 'folleteria', 'afiche',
+      'diptico', 'triptico', 'pendon', 'banner', 'señaletica', 'rotulo',
+      'sticker', 'calcomania', 'vinilo', 'gigantografia', 'ploteo',
+      'serigraf', 'litograf', 'tipograf', 'lona impresa', 'impresora',
+      'toner', 'cartucho', 'tinta',
+    ],
   },
   {
     id: 'vestuario',
     nombre: 'Vestuario y uniformes',
-    keywords: ['vestuario', 'uniforme', 'indumentaria', 'prenda', 'polera', 'camiseta', 'ropa', 'jockey', 'pechera', 'chaleco', 'pantalon'],
+    keywords: [
+      'vestuario', 'uniforme', 'indumentaria', 'polera', 'camiseta', 'camisa',
+      'ropa', 'jockey', 'pechera', 'chaleco', 'pantalon', 'zapato', 'zapatilla',
+      'calzado', 'gorra', 'delantal', 'parka', 'buzo', 'chomba', 'polerón',
+      'corbata', 'prenda', 'impermeable', 'cortaviento', 'overol', 'mameluco',
+    ],
   },
   {
     id: 'publicidad',
     nombre: 'Publicidad y difusión',
-    keywords: ['publicidad', 'difusion', 'marketing', 'promocional', 'estandarte', 'bandera', 'letrero', 'cartel'],
+    keywords: [
+      'publicidad', 'difusion', 'marketing', 'promocional', 'estandarte',
+      'bandera', 'letrero', 'cartel', 'propaganda', 'prensa', 'pauta',
+      'avisaje', 'spot', 'cuña radial', 'aviso', 'comunicacion institucional',
+    ],
   },
   {
     id: 'reconocimientos',
     nombre: 'Reconocimientos y premios',
-    keywords: ['reconocimiento', 'premio', 'medalla', 'trofeo', 'galvano', 'placa', 'diploma', 'distincion', 'souvenir', 'taza', 'mug'],
+    keywords: [
+      'reconocimiento', 'premio', 'medalla', 'trofeo', 'galvano', 'placa',
+      'diploma', 'distincion', 'souvenir', 'taza', 'mug', 'regalo', 'obsequio',
+      'incentivo', 'pin', 'insignia', 'condecorac', 'certificado de honor',
+    ],
   },
   {
     id: 'oficina',
     nombre: 'Materiales de oficina',
-    keywords: ['oficina', 'papel', 'toner', 'cartucho', 'papeleria', 'carpeta', 'archivador', 'boligrafo', 'lapiz', 'cuaderno', 'agenda'],
+    keywords: [
+      'papeleria', 'carpeta', 'archivador', 'boligrafo', 'lapiz', 'cuaderno',
+      'agenda', 'resma', 'papel bond', 'sobre', 'etiqueta', 'sello',
+      'tijera', 'perforadora', 'grapadora', 'clip', 'fastener', 'block',
+      'cinta adhesiva', 'corrector', 'marcador', 'resaltador', 'ligas',
+      'suministros de oficina', 'insumos de oficina', 'utiles de oficina',
+    ],
   },
   {
     id: 'alimentacion',
     nombre: 'Alimentación y catering',
-    keywords: ['alimentacion', 'alimento', 'comida', 'catering', 'cafe', 'colacion', 'bebestible', 'bebida', 'agua', 'despensa', 'snack'],
+    keywords: [
+      'alimentacion', 'alimento', 'comida', 'catering', 'cafe', 'colacion',
+      'bebestible', 'bebida', 'agua purificada', 'despensa', 'snack',
+      'almuerzo', 'desayuno', 'once', 'refrigerio', 'fruta', 'verdura',
+      'viveres', 'racion', 'servicio de alimentacion', 'lunch', 'coffebreak',
+    ],
   },
   {
     id: 'embalaje',
     nombre: 'Embalaje y envases',
-    keywords: ['embalaje', 'envase', 'bolsa', 'empaque', 'plastico', 'contenedor', 'packaging', 'sachet'],
+    keywords: [
+      'embalaje', 'envase', 'bolsa', 'empaque', 'contenedor', 'packaging',
+      'sachet', 'carton corrugado', 'burbuja', 'stretch', 'pallet',
+      'fardo', 'caja de carton', 'bolsa plastica', 'film', 'zuncho',
+    ],
   },
   {
     id: 'limpieza',
     nombre: 'Limpieza y aseo',
-    keywords: ['limpieza', 'aseo', 'detergente', 'desinfectante', 'sanitizante', 'higiene', 'baño'],
+    keywords: [
+      'limpieza', 'aseo', 'detergente', 'desinfectante', 'sanitizante',
+      'higiene', 'baño', 'escoba', 'trapeador', 'mopa', 'cloro', 'lejia',
+      'jabon', 'papel higienico', 'toalla nova', 'bolsa de basura',
+      'cera de piso', 'lustrador', 'ambientador', 'dispensador',
+      'productos de limpieza', 'articulos de aseo',
+    ],
   },
   {
     id: 'tecnologia',
     nombre: 'Tecnología y equipos',
-    keywords: ['computador', 'laptop', 'impresora', 'scanner', 'tablet', 'equipo', 'monitor', 'teclado', 'mouse', 'servidor'],
+    keywords: [
+      'computador', 'laptop', 'notebook', 'scanner', 'tablet', 'monitor',
+      'teclado', 'mouse', 'servidor', 'celular', 'telefono', 'proyector',
+      'cargador', 'disco duro', 'memoria', 'usb', 'cable datos', 'switch',
+      'router', 'software', 'licencia', 'impresora', 'multifuncional',
+      'equipo computacional', 'equipo tecnologico', 'dispositivo',
+      'hardware', 'ups', 'rack de servidor', 'camara ip', 'dvr',
+    ],
   },
   {
     id: 'mobiliario',
     nombre: 'Mobiliario y equipamiento',
-    keywords: ['mobiliario', 'mueble', 'silla', 'mesa', 'escritorio', 'estante', 'locker', 'rack', 'armario'],
+    keywords: [
+      'mobiliario', 'mueble', 'silla', 'mesa', 'escritorio', 'estante',
+      'locker', 'rack', 'armario', 'archivero', 'cajonera', 'vitrina',
+      'sofa', 'sillon', 'butaca', 'estanteria', 'pizarron', 'pizarra',
+      'muebleria', 'recepcion', 'sala de espera', 'panel divisorio',
+      'cortina', 'persiana', 'alfombra',
+    ],
   },
   {
     id: 'construccion',
     nombre: 'Construcción y mantención',
-    keywords: ['construccion', 'mantencion', 'pintura', 'herramienta', 'reparacion', 'instalacion', 'mantimiento', 'obra'],
+    keywords: [
+      'construccion', 'mantencion', 'pintura', 'herramienta', 'reparacion',
+      'instalacion', 'obra', 'gasfiteria', 'electricidad', 'vidrio',
+      'ceramica', 'cemento', 'fierro', 'madera', 'cerradura', 'soldadura',
+      'plomeria', 'techado', 'cielo falso', 'pavimento', 'concreto',
+      'revestimiento', 'demolicion', 'habilitacion', 'remodelacion',
+      'infraestructura', 'jardineria', 'poda', 'paisajismo',
+    ],
   },
   {
     id: 'salud',
     nombre: 'Salud y seguridad',
-    keywords: ['salud', 'medico', 'enfermeria', 'farmacia', 'medicamento', 'implemento', 'epp', 'seguridad', 'casco', 'guante'],
+    keywords: [
+      'salud', 'medico', 'enfermeria', 'farmacia', 'medicamento', 'implemento',
+      'epp', 'seguridad', 'casco', 'guante de latex', 'mascarilla',
+      'alcohol gel', 'termometro', 'botiquin', 'extintor', 'emergencia',
+      'primeros auxilios', 'antiparras', 'protector auditivo', 'arnes',
+      'insumo medico', 'insumo clinico', 'dental', 'equipamiento clinico',
+    ],
+  },
+  {
+    id: 'transporte',
+    nombre: 'Transporte y combustible',
+    keywords: [
+      'transporte', 'furgon', 'camion', 'vehiculo', 'traslado', 'flete',
+      'locomocion', 'bus', 'micro', 'van', 'combustible', 'bencina',
+      'petroleo', 'diesel', 'gasolina', 'lubricante', 'aceite motor',
+      'neumatico', 'llanta', 'courier', 'encomienda', 'despacho',
+      'arriendo de vehiculo', 'servicio de transporte', 'taxi', 'uber',
+    ],
+  },
+  {
+    id: 'capacitacion',
+    nombre: 'Capacitación y formación',
+    keywords: [
+      'capacitacion', 'curso', 'taller', 'formacion', 'entrenamiento',
+      'induccion', 'charla', 'diplomado', 'certificacion', 'adiestramiento',
+      'coaching', 'mentoria', 'relator', 'instructor', 'dictacion',
+      'capacitar', 'programa de formacion', 'aprendizaje',
+    ],
+  },
+  {
+    id: 'eventos',
+    nombre: 'Eventos y ceremonias',
+    keywords: [
+      'evento', 'jornada', 'seminario', 'conferencia', 'reunion', 'coloquio',
+      'congreso', 'ceremonia', 'acto', 'lanzamiento', 'celebracion',
+      'aniversario', 'inauguracion', 'graduacion', 'animacion', 'show',
+      'espectaculo', 'protocolo', 'recepcion', 'banquete', 'coctel',
+      'servicio de eventos', 'produccion de evento', 'audio video evento',
+    ],
+  },
+  {
+    id: 'audiovisual',
+    nombre: 'Fotografía y multimedia',
+    keywords: [
+      'fotografia', 'video', 'audiovisual', 'filmacion', 'grabacion',
+      'streaming', 'transmision en vivo', 'camara', 'sonido', 'audio',
+      'amplificacion', 'pantalla led', 'iluminacion escena', 'produccion audiovisual',
+      'edicion', 'postproduccion', 'fotografo', 'camarografo',
+    ],
   },
 ];
 
@@ -90,7 +198,8 @@ export async function GET() {
 
   const now = new Date();
 
-  const items = (compras ?? []).map(c => ({
+  const items = (compras ?? []).map((c, idx) => ({
+    idx,
     nombre: normalizar(c.nombre ?? ''),
     activa: !c.fecha_cierre || new Date(c.fecha_cierre) > now,
   }));
@@ -101,13 +210,20 @@ export async function GET() {
     cerradas: items.filter(i => !i.activa).length,
   };
 
+  // Normalize keywords once per category
   const normCategorias = CATEGORIAS.map(cat => ({
     ...cat,
     normKeywords: cat.keywords.map(normalizar),
   }));
 
+  const matchedIndexes = new Set<number>();
+
   const categorias = normCategorias.map(cat => {
-    const matching = items.filter(i => cat.normKeywords.some(kw => i.nombre.includes(kw)));
+    const matching = items.filter(i => {
+      const hit = cat.normKeywords.some(kw => i.nombre.includes(kw));
+      if (hit) matchedIndexes.add(i.idx);
+      return hit;
+    });
     return {
       id: cat.id,
       nombre: cat.nombre,
@@ -120,9 +236,18 @@ export async function GET() {
     .filter(c => c.count > 0)
     .sort((a, b) => b.count - a.count);
 
-  // licitaciones que matchean al menos una categoría (sin doble conteo)
-  const allNormKws = normCategorias.flatMap(c => c.normKeywords);
-  const enCategorias = items.filter(i => allNormKws.some(kw => i.nombre.includes(kw))).length;
+  // Catch-all: licitaciones que no calzaron en ninguna categoría
+  const sinCategoria = items.filter(i => !matchedIndexes.has(i.idx));
+  if (sinCategoria.length > 0) {
+    categorias.push({
+      id: 'otros',
+      nombre: 'Otros',
+      keywords: [],
+      count: sinCategoria.length,
+      activas: sinCategoria.filter(i => i.activa).length,
+      cerradas: sinCategoria.filter(i => !i.activa).length,
+    });
+  }
 
-  return NextResponse.json({ totals: { ...totals, enCategorias }, categorias });
+  return NextResponse.json({ totals, categorias });
 }

@@ -14,7 +14,7 @@ const BG_HOVER   = '#F5F8FF';
 const GREEN      = '#059669';
 const GREEN_LIGHT = '#D1FAE5';
 
-interface Totals  { total: number; activas: number; cerradas: number; enCategorias: number; }
+interface Totals  { total: number; activas: number; cerradas: number; }
 interface Categoria {
   id: string; nombre: string; keywords: string[];
   count: number; activas: number; cerradas: number;
@@ -78,8 +78,23 @@ function Icon({ id }: { id: string }) {
     case 'salud': return (
       <svg {...props}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
     );
+    case 'transporte': return (
+      <svg {...props}><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+    );
+    case 'capacitacion': return (
+      <svg {...props}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+    );
+    case 'eventos': return (
+      <svg {...props}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    );
+    case 'audiovisual': return (
+      <svg {...props}><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+    );
+    case 'otros': return (
+      <svg {...props}><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.5" fill={BLUE}/></svg>
+    );
     default: return (
-      <svg {...props}><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <svg {...props}><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.5" fill={BLUE}/></svg>
     );
   }
 }
@@ -161,26 +176,11 @@ export default function CategoriasBrowsePage() {
           <>
             {/* Summary */}
             {totals && (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, margin: '24px 0 10px' }}>
-                  <StatBox label="Total BD" value={totals.total} />
-                  <StatBox label="Activas" value={totals.activas} success />
-                  <StatBox label="Cerradas" value={totals.cerradas} />
-                </div>
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  background: BLUE_LIGHT, borderRadius: 10, padding: '9px 14px', marginBottom: 24,
-                  fontSize: '0.78rem',
-                }}>
-                  <span style={{ color: TEXT_MUTED }}>
-                    Cubiertas por categorías: <strong style={{ color: BLUE }}>{totals.enCategorias}</strong>
-                    <span style={{ color: '#9CA3AF' }}> de {totals.total}</span>
-                  </span>
-                  <span style={{ color: '#9CA3AF', fontSize: '0.7rem' }}>
-                    Los totales por fila pueden solaparse
-                  </span>
-                </div>
-              </>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, margin: '24px 0 24px' }}>
+                <StatBox label="Total" value={totals.total} />
+                <StatBox label="Activas" value={totals.activas} success />
+                <StatBox label="Cerradas" value={totals.cerradas} />
+              </div>
             )}
 
             {/* Table */}
