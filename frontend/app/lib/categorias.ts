@@ -44,8 +44,8 @@ export const CATEGORIAS = [
     nombre: 'Reconocimientos y premios',
     keywords: [
       'reconocimiento', 'premio', 'medalla', 'trofeo', 'galvano', 'placa',
-      'diploma', 'distincion', 'souvenir', 'taza', 'mug', 'regalo', 'obsequio',
-      'incentivo', 'pin', 'insignia', 'condecorac', 'certificado de honor',
+      'diploma', 'distincion', 'souvenir', 'taza', 'regalo', 'obsequio',
+      'incentivo', 'insignia', 'condecorac', 'certificado de honor',
     ],
   },
   {
@@ -140,10 +140,10 @@ export const CATEGORIAS = [
     nombre: 'Transporte y combustible',
     keywords: [
       'transporte', 'furgon', 'camion', 'vehiculo', 'traslado', 'flete',
-      'locomocion', 'bus', 'micro', 'van', 'combustible', 'bencina',
+      'locomocion', 'servicio de bus', 'micro', 'minivan', 'combustible', 'bencina',
       'petroleo', 'diesel', 'gasolina', 'lubricante', 'aceite motor',
       'neumatico', 'llanta', 'courier', 'encomienda', 'despacho',
-      'arriendo de vehiculo', 'servicio de transporte', 'taxi', 'uber',
+      'arriendo de vehiculo', 'servicio de transporte', 'taxi',
     ],
   },
   {
