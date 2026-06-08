@@ -106,10 +106,8 @@ export default function CategoriasBrowsePage() {
       : new URLSearchParams({ keywords: cat.keywords.join(','), limite: '200' });
     const d = await fetch(`/api/licitaciones-categoria?${params}`).then(r => r.json());
     const all = Array.isArray(d) ? d : [];
-    // Otros: muestra todas (activas + cerradas). Resto: solo activas.
-    const result = cat.id === 'otros'
-      ? all
-      : all.filter((l: Licitacion) => !l.fecha_cierre || new Date(l.fecha_cierre) > new Date());
+    // Otras categorías y Otros: solo activas
+    const result = all.filter((l: Licitacion) => !l.fecha_cierre || new Date(l.fecha_cierre) > new Date());
     setLicitaciones(result);
     setLoadingLics(false);
   };
@@ -233,11 +231,6 @@ export default function CategoriasBrowsePage() {
             <div style={{ padding: '12px 16px 6px' }}>
               {loadingLics ? (
                 <p style={{ color: TEXT_MUTED, fontSize: '0.82rem', margin: 0 }}>Buscando…</p>
-              ) : selCat?.id === 'otros' ? (
-                <span style={{ background: BLUE_LIGHT, borderRadius: 99, padding: '4px 11px',
-                  fontSize: '0.76rem', color: BLUE, fontWeight: 600 }}>
-                  {licitaciones.length} licitaciones sin categoría
-                </span>
               ) : (
                 <span style={{ background: GREEN_LIGHT, borderRadius: 99, padding: '4px 11px',
                   fontSize: '0.76rem', color: GREEN, fontWeight: 600 }}>
@@ -252,7 +245,7 @@ export default function CategoriasBrowsePage() {
               </p>
             ) : licitaciones.length === 0 ? (
               <p style={{ color: TEXT_MUTED, textAlign: 'center', padding: 40, fontSize: '0.85rem' }}>
-                {selCat?.id === 'otros' ? 'No hay licitaciones sin categoría' : 'No hay licitaciones activas en esta categoría'}
+                No hay licitaciones activas en esta categoría
               </p>
             ) : (
               <div style={{ margin: '0 16px' }}>

@@ -231,6 +231,15 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
             {compra.organismo} · {compra.codigo}
           </p>
         </div>
+        <a href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${encodeURIComponent(compra.codigo)}`}
+          target="_blank" rel="noopener noreferrer"
+          style={{ height: 30, borderRadius: 6,
+            background: 'rgba(255,255,255,0.15)', color: WHITE,
+            fontSize: '0.75rem', fontWeight: 700, padding: '0 10px',
+            display: 'flex', alignItems: 'center', textDecoration: 'none',
+            whiteSpace: 'nowrap' }}>
+          MP ↗
+        </a>
         <button onClick={todosPreciados ? descargarPDF : undefined}
           title={todosPreciados ? undefined : 'Completa todos los precios para generar el PDF'}
           style={{ height: 30, borderRadius: 6, border: 'none',
@@ -358,6 +367,23 @@ export default function CotizacionPage({ params }: { params: { user_id: string; 
               <Row label="Región"  val={compra.region ?? '—'} />
               {compra.lugar_entrega && <Row label="Entrega" val={compra.lugar_entrega} full />}
               {compra.plazo_entrega_dias && <Row label="Plazo" val={`${compra.plazo_entrega_dias} días`} />}
+              <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
+                <a href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${encodeURIComponent(compra.codigo)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    color: BLUE, fontWeight: 700, fontSize: '0.78rem', textDecoration: 'none',
+                    background: '#EEF3FF', borderRadius: 8, padding: '6px 12px',
+                  }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                  Ver bases técnicas en Mercado Público
+                </a>
+              </div>
             </div>
           )}
         </div>
