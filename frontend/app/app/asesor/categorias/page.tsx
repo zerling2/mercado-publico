@@ -99,15 +99,12 @@ export default function CategoriasBrowsePage() {
   }, []);
 
   const abrirCategoria = async (cat: Categoria) => {
-    if (cat.id === 'otros' || !cat.keywords.length) {
-      setSelCat(cat);
-      setLicitaciones([]);
-      return;
-    }
     setSelCat(cat);
     setLicitaciones([]);
     setLoadingLics(true);
-    const params = new URLSearchParams({ keywords: cat.keywords.join(','), limite: '200' });
+    const params = cat.id === 'otros'
+      ? new URLSearchParams({ otros: 'true', limite: '200' })
+      : new URLSearchParams({ keywords: cat.keywords.join(','), limite: '200' });
     const d = await fetch(`/api/licitaciones-categoria?${params}`).then(r => r.json());
     const now = new Date();
     const activas = (Array.isArray(d) ? d : []).filter((l: Licitacion) =>
@@ -250,12 +247,7 @@ export default function CategoriasBrowsePage() {
               )}
             </div>
 
-            {selCat.id === 'otros' || !selCat.keywords.length ? (
-              <p style={{ color: TEXT_MUTED, padding: '24px 16px', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Esta categoría agrupa licitaciones diversas que no encajan en ninguna categoría específica.
-                Próximamente se crearán subcategorías a medida que se identifiquen patrones.
-              </p>
-            ) : loadingLics ? (
+            {loadingLics ? (
               <p style={{ color: TEXT_MUTED, textAlign: 'center', padding: 40, fontSize: '0.85rem' }}>
                 Buscando licitaciones…
               </p>
