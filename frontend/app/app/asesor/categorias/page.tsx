@@ -14,7 +14,7 @@ const BG_HOVER   = '#F5F8FF';
 const GREEN      = '#059669';
 const GREEN_LIGHT = '#D1FAE5';
 
-interface Totals  { total: number; activas: number; cerradas: number; }
+interface Totals  { total: number; activas: number; cerradas: number; enCategorias: number; }
 interface Categoria {
   id: string; nombre: string; keywords: string[];
   count: number; activas: number; cerradas: number;
@@ -161,11 +161,26 @@ export default function CategoriasBrowsePage() {
           <>
             {/* Summary */}
             {totals && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, margin: '24px 0 28px' }}>
-                <StatBox label="Total" value={totals.total} />
-                <StatBox label="Activas" value={totals.activas} success />
-                <StatBox label="Cerradas" value={totals.cerradas} />
-              </div>
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, margin: '24px 0 10px' }}>
+                  <StatBox label="Total BD" value={totals.total} />
+                  <StatBox label="Activas" value={totals.activas} success />
+                  <StatBox label="Cerradas" value={totals.cerradas} />
+                </div>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  background: BLUE_LIGHT, borderRadius: 10, padding: '9px 14px', marginBottom: 24,
+                  fontSize: '0.78rem',
+                }}>
+                  <span style={{ color: TEXT_MUTED }}>
+                    Cubiertas por categorías: <strong style={{ color: BLUE }}>{totals.enCategorias}</strong>
+                    <span style={{ color: '#9CA3AF' }}> de {totals.total}</span>
+                  </span>
+                  <span style={{ color: '#9CA3AF', fontSize: '0.7rem' }}>
+                    Los totales por fila pueden solaparse
+                  </span>
+                </div>
+              </>
             )}
 
             {/* Table */}

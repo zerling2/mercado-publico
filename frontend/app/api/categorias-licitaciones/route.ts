@@ -101,10 +101,17 @@ export async function GET() {
     cerradas: items.filter(i => !i.activa).length,
   };
 
-  const categorias = CATEGORIAS.map(cat => {
-    const matching = items.filter(i => cat.keywords.some(kw => i.nombre.includes(kw)));
+  const normCategorias = CATEGORIAS.map(cat => ({
+    ...cat,
+    normKeywords: cat.keywords.map(normalizar),
+  }));
+
+  const categorias = normCategorias.map(cat => {
+    const matching = items.filter(i => cat.normKeywords.some(kw => i.nombre.includes(kw)));
     return {
-      ...cat,
+      id: cat.id,
+      nombre: cat.nombre,
+      keywords: cat.keywords,
       count: matching.length,
       activas: matching.filter(i => i.activa).length,
       cerradas: matching.filter(i => !i.activa).length,
@@ -113,5 +120,9 @@ export async function GET() {
     .filter(c => c.count > 0)
     .sort((a, b) => b.count - a.count);
 
-  return NextResponse.json({ totals, categorias });
+  // licitaciones que matchean al menos una categoría (sin doble conteo)
+  const allNormKws = normCategorias.flatMap(c => c.normKeywords);
+  const enCategorias = items.filter(i => allNormKws.some(kw => i.nombre.includes(kw))).length;
+
+  return NextResponse.json({ totals: { ...totals, enCategorias }, categorias });
 }
