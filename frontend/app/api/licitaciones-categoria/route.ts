@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { CATEGORIAS } from '@/app/lib/categorias';
+import { CATEGORIAS, normalizar } from '@/app/lib/categorias';
 
 export const dynamic = 'force-dynamic';
 
 function sb() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
-}
-
-function normalizar(s: string) {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').trim();
 }
 
 export async function GET(req: NextRequest) {

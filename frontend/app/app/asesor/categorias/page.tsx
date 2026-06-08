@@ -22,6 +22,7 @@ interface Licitacion {
   organismo_nombre: string | null; monto: number | null;
   region: string | null; fecha_cierre: string | null; estado: string | null;
 }
+interface Empresa   { id: string; empresa_nombre: string; }
 
 function diasRestantes(fecha: string | null): number | null {
   if (!fecha) return null;
@@ -79,16 +80,14 @@ export default function CategoriasBrowsePage() {
   const [loadingCats, setLoadingCats] = useState(true);
   const [loadingLics, setLoadingLics] = useState(false);
   const [hovered, setHovered]         = useState<string | null>(null);
-  const [userId, setUserId]           = useState('');
+  const [empresas, setEmpresas]       = useState<Empresa[]>([]);
+  const [pickerCodigo, setPickerCodigo] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('asesor_token');
-    if (token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        setUserId(payload.sub ?? '');
-      } catch {}
-    }
+    const token = localStorage.getItem('asesor_token') ?? '';
+    fetch('/api/usuarios', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setEmpresas(Array.isArray(d) ? d : []));
     fetch('/api/categorias-licitaciones')
       .then(r => r.json())
       .then(d => {
@@ -115,10 +114,12 @@ export default function CategoriasBrowsePage() {
   };
 
   const abrirLicitacion = (codigo: string) => {
-    if (userId) {
-      router.push(`/app/cotizacion/${userId}/${encodeURIComponent(codigo)}`);
+    if (empresas.length === 1) {
+      router.push(`/app/cotizacion/${empresas[0].id}/${encodeURIComponent(codigo)}`);
+    } else if (empresas.length > 1) {
+      setPickerCodigo(codigo);
     } else {
-      router.push('/app/dashboard');
+      router.push('/app/asesor/empresa');
     }
   };
 
@@ -183,14 +184,12 @@ export default function CategoriasBrowsePage() {
               <div style={{ margin: '0 16px', border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
                 {/* Column header */}
                 <div style={{
-                  display: 'grid', gridTemplateColumns: '1fr 56px 56px 44px',
+                  display: 'grid', gridTemplateColumns: '1fr 64px',
                   padding: '7px 12px',
                   background: BLUE_LIGHT, borderBottom: `1px solid ${BLUE_MID}`,
                 }}>
                   <span style={{ color: BLUE, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Categoría</span>
                   <span style={{ color: GREEN, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'right' }}>Activas</span>
-                  <span style={{ color: TEXT_MUTED, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'right' }}>Cerrad.</span>
-                  <span style={{ color: TEXT_MUTED, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'right' }}>Total</span>
                 </div>
 
                 {categorias.map((cat, i) => (
@@ -199,7 +198,7 @@ export default function CategoriasBrowsePage() {
                     onMouseEnter={() => setHovered(cat.id)}
                     onMouseLeave={() => setHovered(null)}
                     style={{
-                      display: 'grid', gridTemplateColumns: '1fr 56px 56px 44px',
+                      display: 'grid', gridTemplateColumns: '1fr 64px',
                       alignItems: 'center', padding: '7px 12px',
                       cursor: 'pointer',
                       background: hovered === cat.id ? BG_HOVER : WHITE,
@@ -219,14 +218,8 @@ export default function CategoriasBrowsePage() {
                         {cat.nombre}
                       </span>
                     </div>
-                    <span style={{ color: GREEN, fontSize: '0.8rem', fontWeight: 700, textAlign: 'right' }}>
+                    <span style={{ color: GREEN, fontSize: '0.82rem', fontWeight: 700, textAlign: 'right' }}>
                       {cat.activas}
-                    </span>
-                    <span style={{ color: TEXT_MUTED, fontSize: '0.78rem', textAlign: 'right' }}>
-                      {cat.cerradas}
-                    </span>
-                    <span style={{ color: TEXT_MUTED, fontSize: '0.78rem', fontWeight: 500, textAlign: 'right' }}>
-                      {cat.count}
                     </span>
                   </div>
                 ))}
@@ -307,6 +300,58 @@ export default function CategoriasBrowsePage() {
           </>
         )}
       </div>
+
+      {/* ── Empresa picker ── */}
+      {pickerCodigo && (
+        <div
+          onClick={() => setPickerCodigo(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+            zIndex: 200, display: 'flex', alignItems: 'flex-end',
+          }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: WHITE, width: '100%',
+              borderRadius: '16px 16px 0 0',
+              padding: '20px 16px 36px',
+              boxShadow: '0 -4px 24px rgba(0,0,0,0.12)',
+            }}>
+            <p style={{ margin: '0 0 4px', fontSize: '0.88rem', fontWeight: 700, color: TEXT }}>
+              ¿Para qué cliente?
+            </p>
+            <p style={{ margin: '0 0 16px', fontSize: '0.75rem', color: TEXT_MUTED }}>
+              Se abrirá la calculadora de cotización
+            </p>
+            {empresas.map(emp => (
+              <button key={emp.id}
+                onClick={() => {
+                  setPickerCodigo(null);
+                  router.push(`/app/cotizacion/${emp.id}/${encodeURIComponent(pickerCodigo)}`);
+                }}
+                style={{
+                  display: 'block', width: '100%', padding: '11px 14px',
+                  background: BLUE_LIGHT, border: 'none', borderRadius: 10,
+                  fontSize: '0.84rem', fontWeight: 600, color: BLUE,
+                  cursor: 'pointer', marginBottom: 8, textAlign: 'left',
+                  fontFamily: FONT,
+                }}>
+                {emp.empresa_nombre}
+              </button>
+            ))}
+            <button
+              onClick={() => setPickerCodigo(null)}
+              style={{
+                display: 'block', width: '100%', padding: '11px 14px',
+                background: 'none', border: `1px solid ${BORDER}`, borderRadius: 10,
+                fontSize: '0.82rem', color: TEXT_MUTED, cursor: 'pointer',
+                marginTop: 4, fontFamily: FONT,
+              }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Fixed footer bar ── */}
       <div style={{
