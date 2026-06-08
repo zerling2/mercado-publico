@@ -367,38 +367,28 @@ export default function CategoriasBrowsePage() {
           </>
         ) : (
           <>
-            {/* Encabezado: conteo + empresas con match */}
-            <div style={{ padding: '10px 16px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {/* Encabezado: conteo + chip de matches */}
+            <div style={{ padding: '10px 16px 8px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {loadingLics ? (
                 <p style={{ color: TEXT_MUTED, fontSize: '0.82rem', margin: 0 }}>Buscando…</p>
               ) : (
-                <span style={{ background: GREEN_LIGHT, borderRadius: 99, padding: '4px 11px',
-                  fontSize: '0.76rem', color: GREEN, fontWeight: 600, alignSelf: 'flex-start' }}>
-                  {licitaciones.length} activas
-                </span>
+                <>
+                  <span style={{ background: GREEN_LIGHT, borderRadius: 99, padding: '4px 11px',
+                    fontSize: '0.76rem', color: GREEN, fontWeight: 600 }}>
+                    {licitaciones.length} activas
+                  </span>
+                  {filtroActivo && (() => {
+                    const n = licitaciones.filter(l => l.relevante).length;
+                    if (!n) return null;
+                    return (
+                      <span style={{ background: BLUE_MID, borderRadius: 99, padding: '4px 11px',
+                        fontSize: '0.76rem', color: BLUE_DARK, fontWeight: 700 }}>
+                        {n} con match
+                      </span>
+                    );
+                  })()}
+                </>
               )}
-
-              {/* Banner de empresas con match — siempre visible si filtro activo */}
-              {!loadingLics && filtroActivo && selCat && (() => {
-                const matching = [...selEmpresas]
-                  .filter(eid => empresaCatMap.get(eid)?.has(selCat.id))
-                  .map(eid => empresas.find(e => e.id === eid)?.empresa_nombre)
-                  .filter((n): n is string => !!n);
-                if (!matching.length) return null;
-                return (
-                  <div style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 7,
-                    background: GREEN_LIGHT, borderRadius: 10, padding: '8px 11px',
-                  }}>
-                    <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
-                      background: GREEN, flexShrink: 0, marginTop: 3 }} />
-                    <span style={{ fontSize: '0.76rem', color: '#065F46', lineHeight: 1.45 }}>
-                      <strong>{matching.join(', ')}</strong>
-                      {matching.length === 1 ? ' participa' : ' participan'} en esta categoría
-                    </span>
-                  </div>
-                );
-              })()}
             </div>
 
             {loadingLics ? (
@@ -412,56 +402,74 @@ export default function CategoriasBrowsePage() {
             ) : (
               <div style={{ margin: '0 16px', border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
                 {licitaciones.map((lic, i) => {
-                  const dias    = diasRestantes(lic.fecha_cierre);
-                  const cerrada = dias != null && dias < 0;
-                  const urgente = dias != null && dias >= 0 && dias <= 3;
-                  const detalle = [
+                  const dias      = diasRestantes(lic.fecha_cierre);
+                  const cerrada   = dias != null && dias < 0;
+                  const urgente   = dias != null && dias >= 0 && dias <= 3;
+                  const esMatch   = filtroActivo && !!lic.relevante;
+                  const hayMatch  = filtroActivo && licitaciones.some(l => l.relevante);
+                  const separator = hayMatch && filtroActivo && !lic.relevante &&
+                    (i === 0 || licitaciones[i - 1]?.relevante === true);
+                  const detalle   = [
                     lic.codigo,
                     pesos(lic.monto),
                     fechaCorta(lic.fecha_cierre),
                   ].filter(Boolean).join(' · ');
                   return (
-                    <div
-                      key={lic.id}
-                      onClick={() => abrirLicitacion(lic.codigo)}
-                      onMouseEnter={() => setHovered(lic.id)}
-                      onMouseLeave={() => setHovered(null)}
-                      style={{
-                        padding: '9px 12px',
-                        borderBottom: i < licitaciones.length - 1 ? `1px solid ${BORDER}` : 'none',
-                        cursor: 'pointer',
-                        background: hovered === lic.id ? BG_HOVER : WHITE,
-                        transition: 'background 0.1s',
-                        display: 'flex', alignItems: 'center', gap: 8,
-                      }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{
-                          margin: 0, color: TEXT, fontWeight: 700, fontSize: '0.82rem',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    <React.Fragment key={lic.id}>
+                      {separator && (
+                        <div style={{
+                          padding: '6px 12px', background: '#F9FAFB',
+                          borderBottom: `1px solid ${BORDER}`,
                         }}>
-                          {lic.organismo_nombre ?? '—'}
-                        </p>
-                        <p style={{
-                          margin: '2px 0 0', color: TEXT_MUTED, fontSize: '0.68rem',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          letterSpacing: '0.01em',
-                        }}>
-                          {detalle}
-                        </p>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                        {dias != null && (
-                          <span style={{
-                            fontSize: '0.66rem', fontWeight: 700, padding: '2px 7px', borderRadius: 99,
-                            background: cerrada ? '#F3F4F6' : urgente ? '#FEF2F2' : GREEN_LIGHT,
-                            color:      cerrada ? TEXT_MUTED  : urgente ? '#DC2626' : GREEN,
-                          }}>
-                            {cerrada ? 'Cerrada' : dias === 0 ? 'Hoy' : `${dias}d`}
+                          <span style={{ fontSize: '0.65rem', fontWeight: 700, color: TEXT_MUTED,
+                            textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                            Otras en esta categoría
                           </span>
-                        )}
-                        <ChevronRight />
+                        </div>
+                      )}
+                      <div
+                        onClick={() => abrirLicitacion(lic.codigo)}
+                        onMouseEnter={() => setHovered(lic.id)}
+                        onMouseLeave={() => setHovered(null)}
+                        style={{
+                          padding: '9px 12px',
+                          borderBottom: i < licitaciones.length - 1 ? `1px solid ${BORDER}` : 'none',
+                          cursor: 'pointer',
+                          background: hovered === lic.id ? BG_HOVER : WHITE,
+                          transition: 'background 0.1s',
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          borderLeft: esMatch ? `3px solid ${GREEN}` : '3px solid transparent',
+                        }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{
+                            margin: 0, fontWeight: 700, fontSize: '0.82rem',
+                            color: esMatch ? TEXT : TEXT,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {lic.organismo_nombre ?? '—'}
+                          </p>
+                          <p style={{
+                            margin: '2px 0 0', color: TEXT_MUTED, fontSize: '0.68rem',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            letterSpacing: '0.01em',
+                          }}>
+                            {detalle}
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                          {dias != null && (
+                            <span style={{
+                              fontSize: '0.66rem', fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+                              background: cerrada ? '#F3F4F6' : urgente ? '#FEF2F2' : GREEN_LIGHT,
+                              color:      cerrada ? TEXT_MUTED  : urgente ? '#DC2626' : GREEN,
+                            }}>
+                              {cerrada ? 'Cerrada' : dias === 0 ? 'Hoy' : `${dias}d`}
+                            </span>
+                          )}
+                          <ChevronRight />
+                        </div>
                       </div>
-                    </div>
+                    </React.Fragment>
                   );
                 })}
               </div>

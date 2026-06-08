@@ -8,6 +8,24 @@ function sb() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 }
 
+// Palabras funcionales que no aportan al matching
+const STOPWORDS = new Set([
+  'para', 'como', 'este', 'esta', 'esto', 'esos', 'esas', 'ellos', 'ellas',
+  'algo', 'nada', 'todo', 'todos', 'toda', 'todas', 'unos', 'unas', 'otros',
+  'otras', 'cual', 'cuyo', 'cuya', 'donde', 'cuando', 'desde', 'hasta',
+  'entre', 'bajo', 'cada', 'solo', 'bien', 'hace', 'años', 'tipo',
+]);
+
+function catalogoKeywords(nombres: string[]): string[] {
+  const kws = new Set<string>();
+  for (const nombre of nombres) {
+    for (const word of normalizar(nombre).split(/\s+/)) {
+      if (word.length > 3 && !STOPWORDS.has(word)) kws.add(word);
+    }
+  }
+  return [...kws];
+}
+
 export async function GET(req: NextRequest) {
   const limite     = Math.min(Number(req.nextUrl.searchParams.get('limite') ?? 200), 500);
   const esOtros    = req.nextUrl.searchParams.get('otros') === 'true';
@@ -46,20 +64,25 @@ export async function GET(req: NextRequest) {
   }
 
   if (empresaIds.length > 0 && filtradas.length > 0) {
-    const compraIds = filtradas.map(c => c.id);
-    const { data: rels } = await sb()
-      .from('relevancia_compras')
-      .select('compra_agil_id')
-      .in('user_id', empresaIds)
-      .in('compra_agil_id', compraIds)
-      .gt('relevancia_score', 0);
+    // Obtener productos del catálogo de las empresas seleccionadas
+    const { data: productos } = await sb()
+      .from('catalogo_empresas')
+      .select('nombre')
+      .in('user_id', empresaIds);
 
-    const relevantIds = new Set((rels ?? []).map(r => r.compra_agil_id as string));
-    const annotated = filtradas.map(c => ({ ...c, relevante: relevantIds.has(c.id) }));
+    const kws = catalogoKeywords((productos ?? []).map(p => p.nombre ?? ''));
+
+    const annotated = filtradas.map(c => ({
+      ...c,
+      relevante: kws.length > 0 && kws.some(kw => normalizar(c.nombre ?? '').includes(kw)),
+    }));
+
+    // Relevantes primero, manteniendo orden por fecha dentro de cada grupo
     annotated.sort((a, b) => {
       if (a.relevante === b.relevante) return 0;
       return a.relevante ? -1 : 1;
     });
+
     return NextResponse.json(annotated);
   }
 
