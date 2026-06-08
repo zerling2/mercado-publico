@@ -73,21 +73,25 @@ function ChevronRight() {
 
 export default function CategoriasBrowsePage() {
   const router  = useRouter();
-  const [totals, setTotals]           = useState<Totals | null>(null);
-  const [categorias, setCategorias]   = useState<Categoria[]>([]);
-  const [selCat, setSelCat]           = useState<Categoria | null>(null);
+  const [totals, setTotals]             = useState<Totals | null>(null);
+  const [categorias, setCategorias]     = useState<Categoria[]>([]);
+  const [empresasCat, setEmpresasCat]   = useState<Record<string, number>>({});
+  const [selCat, setSelCat]             = useState<Categoria | null>(null);
   const [licitaciones, setLicitaciones] = useState<Licitacion[]>([]);
-  const [loadingCats, setLoadingCats] = useState(true);
-  const [loadingLics, setLoadingLics] = useState(false);
-  const [hovered, setHovered]         = useState<string | null>(null);
-  const [empresas, setEmpresas]       = useState<Empresa[]>([]);
+  const [loadingCats, setLoadingCats]   = useState(true);
+  const [loadingLics, setLoadingLics]   = useState(false);
+  const [hovered, setHovered]           = useState<string | null>(null);
+  const [empresas, setEmpresas]         = useState<Empresa[]>([]);
   const [pickerCodigo, setPickerCodigo] = useState<string | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('asesor_token') ?? '';
-    fetch('/api/usuarios', { headers: { Authorization: `Bearer ${token}` } })
+    const authHeader = { Authorization: `Bearer ${token}` };
+
+    fetch('/api/usuarios', { headers: authHeader })
       .then(r => r.json())
       .then(d => setEmpresas(Array.isArray(d) ? d : []));
+
     fetch('/api/categorias-licitaciones')
       .then(r => r.json())
       .then(d => {
@@ -95,6 +99,11 @@ export default function CategoriasBrowsePage() {
         setCategorias(Array.isArray(d.categorias) ? d.categorias : []);
         setLoadingCats(false);
       });
+
+    // Cargar conteo de empresas por categoría (incluye sync automático)
+    fetch('/api/asesor/empresas-por-categoria', { headers: authHeader })
+      .then(r => r.json())
+      .then(d => { if (d && typeof d === 'object' && !d.error) setEmpresasCat(d); });
   }, []);
 
   const abrirCategoria = async (cat: Categoria) => {
@@ -183,45 +192,55 @@ export default function CategoriasBrowsePage() {
               <div style={{ margin: '0 16px', border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
                 {/* Column header */}
                 <div style={{
-                  display: 'grid', gridTemplateColumns: '1fr 64px',
+                  display: 'grid', gridTemplateColumns: '1fr 52px 52px',
                   padding: '7px 12px',
                   background: BLUE_LIGHT, borderBottom: `1px solid ${BLUE_MID}`,
                 }}>
                   <span style={{ color: BLUE, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Categoría</span>
-                  <span style={{ color: GREEN, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'right' }}>Activas</span>
+                  <span style={{ color: GREEN, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'right' }}>Licit.</span>
+                  <span style={{ color: BLUE, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'right' }}>Empres.</span>
                 </div>
 
-                {categorias.map((cat, i) => (
-                  <div key={cat.id}
-                    onClick={() => abrirCategoria(cat)}
-                    onMouseEnter={() => setHovered(cat.id)}
-                    onMouseLeave={() => setHovered(null)}
-                    style={{
-                      display: 'grid', gridTemplateColumns: '1fr 64px',
-                      alignItems: 'center', padding: '7px 12px',
-                      cursor: 'pointer',
-                      background: hovered === cat.id ? BG_HOVER : WHITE,
-                      borderBottom: i < categorias.length - 1 ? `1px solid ${BORDER}` : 'none',
-                      transition: 'background 0.1s',
-                    }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{
-                        width: 26, height: 26, borderRadius: 7, flexShrink: 0,
-                        background: hovered === cat.id ? BLUE_MID : BLUE_LIGHT,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                {categorias.map((cat, i) => {
+                  const nEmp = empresasCat[cat.id] ?? 0;
+                  return (
+                    <div key={cat.id}
+                      onClick={() => abrirCategoria(cat)}
+                      onMouseEnter={() => setHovered(cat.id)}
+                      onMouseLeave={() => setHovered(null)}
+                      style={{
+                        display: 'grid', gridTemplateColumns: '1fr 52px 52px',
+                        alignItems: 'center', padding: '7px 12px',
+                        cursor: 'pointer',
+                        background: hovered === cat.id ? BG_HOVER : WHITE,
+                        borderBottom: i < categorias.length - 1 ? `1px solid ${BORDER}` : 'none',
                         transition: 'background 0.1s',
                       }}>
-                        <Icon id={cat.id} size={15} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{
+                          width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+                          background: hovered === cat.id ? BLUE_MID : BLUE_LIGHT,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          transition: 'background 0.1s',
+                        }}>
+                          <Icon id={cat.id} size={15} />
+                        </div>
+                        <span style={{ color: TEXT, fontSize: '0.8rem', fontWeight: 600, lineHeight: 1.25 }}>
+                          {cat.nombre}
+                        </span>
                       </div>
-                      <span style={{ color: TEXT, fontSize: '0.8rem', fontWeight: 600, lineHeight: 1.25 }}>
-                        {cat.nombre}
+                      <span style={{ color: GREEN, fontSize: '0.82rem', fontWeight: 700, textAlign: 'right' }}>
+                        {cat.activas}
+                      </span>
+                      <span style={{
+                        fontSize: '0.82rem', fontWeight: 700, textAlign: 'right',
+                        color: nEmp > 0 ? BLUE : '#D1D5DB',
+                      }}>
+                        {nEmp > 0 ? nEmp : '—'}
                       </span>
                     </div>
-                    <span style={{ color: GREEN, fontSize: '0.82rem', fontWeight: 700, textAlign: 'right' }}>
-                      {cat.activas}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
