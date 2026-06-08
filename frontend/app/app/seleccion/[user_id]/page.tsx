@@ -14,9 +14,9 @@ type Scope = 'catalogo' | 'mixto' | 'nuevo';
 interface Categoria {
   id: string;
   nombre: string;
-  emoji: string;
   keywords: string[];
   count: number;
+  activas: number;
 }
 
 interface Usuario {
@@ -25,7 +25,7 @@ interface Usuario {
 }
 
 function normalizar(s: string) {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').trim();
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 export default function SeleccionPage() {
@@ -35,7 +35,6 @@ export default function SeleccionPage() {
   const [usuario, setUsuario]       = useState<Usuario | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [selCats, setSelCats]       = useState<Set<string>>(new Set());
-  const [selRubros, setSelRubros]   = useState<Set<string>>(new Set());
   const [scope, setScope]           = useState<Scope>('mixto');
   const [cajon, setCajon]           = useState('');
   const [loading, setLoading]       = useState(true);
@@ -48,12 +47,21 @@ export default function SeleccionPage() {
       fetch('/api/categorias-licitaciones').then(r => r.json()),
     ]).then(([u, c]) => {
       setUsuario(u ?? null);
-      setCategorias(Array.isArray(c) ? c : []);
+      // API returns { totals, categorias } — handle both formats
+      const cats: Categoria[] = Array.isArray(c) ? c : (c.categorias ?? []);
+      setCategorias(cats.filter((cat: Categoria) => cat.id !== 'otros'));
       setLoading(false);
     });
   }, [user_id]);
 
-  // Cajón: filter categories by text the user types
+  // Pre-select saved category IDs from rubros_json
+  useEffect(() => {
+    if (!usuario || categorias.length === 0) return;
+    const catIdSet = new Set(categorias.map(c => c.id));
+    const savedIds = (usuario.rubros_json ?? []).filter(r => catIdSet.has(r));
+    if (savedIds.length > 0) setSelCats(new Set(savedIds));
+  }, [usuario, categorias]);
+
   const cajonNorm = normalizar(cajon);
   const catsFiltradas = cajonNorm.length < 2
     ? categorias
@@ -62,7 +70,6 @@ export default function SeleccionPage() {
         normalizar(cat.nombre).includes(cajonNorm)
       );
 
-  // Auto-select categories that match the cajón text
   useEffect(() => {
     if (cajonNorm.length < 2) return;
     const matches = categorias
@@ -71,41 +78,49 @@ export default function SeleccionPage() {
         normalizar(cat.nombre).includes(cajonNorm)
       )
       .map(c => c.id);
-    if (matches.length > 0) {
-      setSelCats(prev => new Set([...prev, ...matches]));
-    }
+    if (matches.length > 0) setSelCats(prev => new Set([...prev, ...matches]));
   }, [cajonNorm, categorias]);
 
   const toggleCat = (id: string) =>
     setSelCats(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  const toggleRubro = (r: string) =>
-    setSelRubros(prev => { const n = new Set(prev); n.has(r) ? n.delete(r) : n.add(r); return n; });
+  const savedCatIds = (usuario?.rubros_json ?? []).filter(r =>
+    categorias.some(c => c.id === r)
+  );
 
-  const rubros = usuario?.rubros_json ?? [];
+  // Legacy free-text rubros (not category IDs — kept for backward compat)
+  const legacyRubros = (usuario?.rubros_json ?? []).filter(r =>
+    !categorias.some(c => c.id === r)
+  );
 
-  // Build keywords based on scope
   const buildKeywords = useCallback((): string[] => {
-    const catKw = categorias.filter(c => selCats.has(c.id)).flatMap(c => c.keywords);
-    const rubroTerms = Array.from(selRubros);
-    const allRubroKw = rubros; // user's registered rubros as keywords
+    const catIdSet = new Set(categorias.map(c => c.id));
+    const saved = (usuario?.rubros_json ?? []).filter(r => catIdSet.has(r));
+    const savedKw = categorias.filter(c => saved.includes(c.id)).flatMap(c => c.keywords);
+    const selKw   = categorias.filter(c => selCats.has(c.id)).flatMap(c => c.keywords);
+    const legacy  = (usuario?.rubros_json ?? []).filter(r => !catIdSet.has(r));
 
-    if (scope === 'catalogo') return [...new Set([...allRubroKw, ...rubroTerms])];
-    if (scope === 'nuevo')    return [...new Set(catKw)];
-    return [...new Set([...allRubroKw, ...rubroTerms, ...catKw])]; // mixto
-  }, [scope, selCats, selRubros, categorias, rubros]);
+    if (scope === 'catalogo') return [...new Set([...savedKw, ...legacy])];
+    if (scope === 'nuevo')    return [...new Set(selKw)];
+    return [...new Set([...savedKw, ...legacy, ...selKw])];
+  }, [scope, selCats, categorias, usuario]);
 
-  const totalSel = scope === 'catalogo'
-    ? rubros.length + selRubros.size
-    : selCats.size + (scope === 'mixto' ? rubros.length + selRubros.size : 0);
-
-  const puedeAvanzar = scope === 'catalogo'
-    ? rubros.length > 0
-    : selCats.size > 0;
+  const puedeAvanzar = scope === 'catalogo' ? savedCatIds.length > 0 : selCats.size > 0;
 
   const buscar = useCallback(async () => {
     if (!puedeAvanzar) { setError('Selecciona al menos una categoría'); return; }
     setBuscando(true); setError('');
+
+    // Persist selected categories to rubros_json
+    const toSave = Array.from(selCats);
+    if (toSave.length > 0) {
+      await fetch(`/api/usuarios/${user_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rubros_json: toSave }),
+      });
+    }
+
     const keywords = buildKeywords();
     if (!keywords.length) { setError('Sin palabras clave para buscar'); setBuscando(false); return; }
 
@@ -118,7 +133,7 @@ export default function SeleccionPage() {
     setBuscando(false);
     if (json.error) { setError(json.error); return; }
     router.push(`/app/dashboard/${user_id}`);
-  }, [puedeAvanzar, buildKeywords, user_id, router]);
+  }, [puedeAvanzar, buildKeywords, user_id, router, selCats]);
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: NAVY, display: 'flex',
@@ -128,13 +143,14 @@ export default function SeleccionPage() {
   );
 
   const SCOPES: { id: Scope; label: string; desc: string }[] = [
-    { id: 'catalogo', label: 'Mi catálogo',         desc: 'Solo productos que ya ofrece esta empresa' },
-    { id: 'mixto',    label: 'Mi catálogo + nuevos', desc: 'Sus productos más categorías adicionales' },
-    { id: 'nuevo',    label: 'Productos nuevos',     desc: 'Categorías que aún no están en su cartera' },
+    { id: 'catalogo', label: 'Mi catálogo',          desc: 'Solo las categorías guardadas de esta empresa' },
+    { id: 'mixto',    label: 'Mi catálogo + nuevos',  desc: 'Categorías guardadas más las que sumes hoy' },
+    { id: 'nuevo',    label: 'Búsqueda nueva',        desc: 'Solo las categorías que selecciones ahora' },
   ];
 
   const showCajon   = scope === 'nuevo' || scope === 'mixto';
-  const showRubros  = (scope === 'catalogo' || scope === 'mixto') && rubros.length > 0;
+  const showGuardadas = (scope === 'catalogo' || scope === 'mixto') && savedCatIds.length > 0;
+  const showLegacy  = (scope === 'catalogo' || scope === 'mixto') && legacyRubros.length > 0;
   const showCatGrid = scope !== 'catalogo';
 
   return (
@@ -146,7 +162,6 @@ export default function SeleccionPage() {
     }}>
       <div style={{ width: '100%', maxWidth: 520, paddingTop: 40 }}>
 
-        {/* Back + company name */}
         <button onClick={() => router.back()}
           style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)',
             fontSize: '0.82rem', cursor: 'pointer', padding: 0, marginBottom: 18 }}>
@@ -195,33 +210,52 @@ export default function SeleccionPage() {
           </div>
         </div>
 
-        {/* User rubros chips */}
-        {showRubros && (
+        {/* Saved categories (shown in catalogo + mixto) */}
+        {showGuardadas && (
           <div style={{ marginBottom: 20 }}>
             <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.68rem', fontWeight: 700,
               textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px 2px' }}>
-              Productos de {usuario?.empresa_nombre}
+              Categorías de {usuario?.empresa_nombre}
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-              {rubros.map(r => (
-                <button key={r} onClick={() => toggleRubro(r)}
-                  style={{
+              {savedCatIds.map(id => {
+                const cat = categorias.find(c => c.id === id);
+                return (
+                  <span key={id} style={{
                     height: 32, borderRadius: 99, padding: '0 13px',
-                    border: `1.5px solid ${selRubros.has(r) ? BLUE : 'rgba(255,255,255,0.2)'}`,
-                    background: selRubros.has(r) ? BLUE : 'rgba(255,255,255,0.06)',
-                    color: selRubros.has(r) ? WHITE : 'rgba(255,255,255,0.7)',
-                    fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+                    background: 'rgba(0,71,204,0.35)', color: '#90B8FF',
+                    fontSize: '0.78rem', fontWeight: 600,
+                    display: 'inline-flex', alignItems: 'center',
                   }}>
-                  {scope === 'mixto' && selRubros.has(r) ? '✓ ' : ''}{r}
-                </button>
+                    {cat?.nombre ?? id}
+                  </span>
+                );
+              })}
+              {legacyRubros.length > 0 && legacyRubros.map(r => (
+                <span key={r} style={{
+                  height: 32, borderRadius: 99, padding: '0 13px',
+                  background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)',
+                  fontSize: '0.78rem', fontWeight: 600,
+                  display: 'inline-flex', alignItems: 'center',
+                }}>
+                  {r}
+                </span>
               ))}
-              {scope === 'catalogo' && rubros.length > 0 && (
-                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.72rem', margin: '4px 0 0',
-                  width: '100%' }}>
-                  Se buscarán licitaciones para todos los productos de esta empresa.
-                </p>
-              )}
             </div>
+            {scope === 'catalogo' && (
+              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.72rem', margin: '6px 0 0 2px' }}>
+                Se buscarán licitaciones en estas categorías.
+              </p>
+            )}
+          </div>
+        )}
+
+        {scope === 'catalogo' && savedCatIds.length === 0 && (
+          <div style={{ background: 'rgba(255,200,0,0.08)', border: '1px solid rgba(255,200,0,0.2)',
+            borderRadius: 12, padding: '12px 14px', marginBottom: 20 }}>
+            <p style={{ margin: 0, color: 'rgba(255,200,0,0.8)', fontSize: '0.82rem' }}>
+              Esta empresa aún no tiene categorías guardadas. Usa "Búsqueda nueva" para asignarlas.
+            </p>
           </div>
         )}
 
@@ -258,52 +292,70 @@ export default function SeleccionPage() {
                 Sin categorías para "{cajon}" — intenta con otra palabra
               </p>
             )}
-            {cajon.length >= 2 && catsFiltradas.length > 0 && (
-              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.73rem', margin: '6px 0 0 2px' }}>
-                Mostrando categorías relacionadas con "{cajon}"
-              </p>
-            )}
           </div>
         )}
 
         {/* Category grid */}
         {showCatGrid && (
           <div style={{ marginBottom: 16 }}>
-            {!showCajon && (
-              <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.68rem', fontWeight: 700,
-                textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px 2px' }}>
-                Categorías disponibles en el portal
-              </p>
-            )}
+            <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.68rem', fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px 2px' }}>
+              {scope === 'mixto' ? 'Agregar más categorías' : 'Categorías disponibles'}
+            </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {catsFiltradas.map(cat => {
                 const sel = selCats.has(cat.id);
+                const esSaved = savedCatIds.includes(cat.id);
                 return (
                   <button key={cat.id} onClick={() => toggleCat(cat.id)}
                     style={{
                       background: sel ? 'rgba(0,71,204,0.35)' : BGCARD,
                       border: `1.5px solid ${sel ? BLUE : BORDER}`,
-                      borderRadius: 14, padding: '14px 12px',
+                      borderRadius: 14, padding: '12px 12px',
                       cursor: 'pointer', textAlign: 'left',
                     }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: '1.25rem' }}>{cat.emoji}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'flex-start', marginBottom: 4 }}>
+                      <p style={{ margin: 0, color: sel ? WHITE : 'rgba(255,255,255,0.8)',
+                        fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.3, flex: 1 }}>
+                        {cat.nombre}
+                      </p>
                       {sel && (
                         <span style={{ width: 18, height: 18, borderRadius: '50%', background: BLUE,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '0.6rem', color: WHITE, fontWeight: 900, flexShrink: 0 }}>✓</span>
+                          fontSize: '0.6rem', color: WHITE, fontWeight: 900, flexShrink: 0, marginLeft: 4 }}>✓</span>
                       )}
                     </div>
-                    <p style={{ margin: '0 0 2px', color: sel ? WHITE : 'rgba(255,255,255,0.8)',
-                      fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.3 }}>
-                      {cat.nombre}
-                    </p>
                     <p style={{ margin: 0, color: 'rgba(255,255,255,0.35)', fontSize: '0.68rem' }}>
-                      {cat.count} licitaciones
+                      {cat.activas ?? cat.count} activas
+                      {esSaved && (
+                        <span style={{ marginLeft: 6, color: '#90B8FF' }}>· guardada</span>
+                      )}
                     </p>
                   </button>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {showLegacy && !showGuardadas && (
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.68rem', fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px 2px' }}>
+              Rubros registrados
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              {legacyRubros.map(r => (
+                <span key={r} style={{
+                  height: 32, borderRadius: 99, padding: '0 13px',
+                  background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)',
+                  fontSize: '0.78rem', fontWeight: 600,
+                  display: 'inline-flex', alignItems: 'center',
+                }}>
+                  {r}
+                </span>
+              ))}
             </div>
           </div>
         )}
@@ -330,13 +382,14 @@ export default function SeleccionPage() {
             color: puedeAvanzar ? WHITE : 'rgba(255,255,255,0.3)',
             fontSize: '0.95rem', fontWeight: 700,
             cursor: puedeAvanzar ? 'pointer' : 'default',
+            fontFamily: 'inherit',
           }}>
           {buscando
             ? 'Buscando oportunidades…'
             : puedeAvanzar
-              ? `Ver oportunidades`
+              ? `Ver oportunidades (${scope === 'catalogo' ? savedCatIds.length : selCats.size} categorías)`
               : scope === 'catalogo'
-                ? 'Esta empresa no tiene rubros registrados'
+                ? 'Esta empresa no tiene categorías guardadas'
                 : 'Selecciona al menos una categoría'}
         </button>
       </div>

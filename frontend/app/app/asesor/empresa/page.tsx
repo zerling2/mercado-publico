@@ -2,10 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { CATEGORIAS } from '@/app/lib/categorias';
 
 const NAVY  = '#001A4D';
 const BLUE  = '#0047CC';
 const WHITE = '#FFFFFF';
+
+const CAT_NOMBRES = new Map(CATEGORIAS.map(c => [c.id, c.nombre]));
 
 interface Usuario {
   id: string;
@@ -105,7 +108,7 @@ export default function EmpresaCarteraPage() {
                           <span key={r} style={{
                             background: 'rgba(0,71,204,0.35)', color: '#90B8FF',
                             fontSize: '0.67rem', fontWeight: 600, padding: '2px 7px', borderRadius: 99,
-                          }}>{r}</span>
+                          }}>{CAT_NOMBRES.get(r) ?? r}</span>
                         ))}
                         {(u.rubros_json.length > 4) && (
                           <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.67rem' }}>
@@ -115,7 +118,7 @@ export default function EmpresaCarteraPage() {
                       </div>
                     ) : (
                       <span style={{ fontSize: '0.68rem', color: 'rgba(255,200,0,0.6)', marginTop: 4, display: 'block' }}>
-                        Sin rubros configurados
+                        Sin categorías configuradas
                       </span>
                     )}
                   </div>
