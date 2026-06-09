@@ -1,0 +1,45 @@
+name: Medir cuota API Mercado Público
+
+on:
+  workflow_dispatch:
+    inputs:
+      tamano_pagina:
+        description: 'Items por página (default 50, max 100)'
+        required: false
+        default: '50'
+      espera_ms:
+        description: 'Milisegundos entre requests (default 3000)'
+        required: false
+        default: '3000'
+
+jobs:
+  medir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Ejecutar medición
+        env:
+          MP_API_TICKET: ${{ secrets.MP_API_TICKET }}
+          TAMANO_PAGINA: ${{ github.event.inputs.tamano_pagina }}
+          ESPERA_MS:     ${{ github.event.inputs.espera_ms }}
+        run: node validacion/medir-cuota.js
+        working-directory: ${{ github.workspace }}
+
+      - name: Subir resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-cuota
+          path: |
+            validacion/resultados.csv
+            validacion/resumen.txt
+          retention-days: 7
