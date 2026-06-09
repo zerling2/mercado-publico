@@ -21,7 +21,7 @@ const path  = require('path');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const TICKET    = process.env.MP_API_TICKET ?? '';
+const TICKET    = (process.env.MP_API_TICKET ?? '').trim();
 const TAMANO    = Number(process.env.TAMANO_PAGINA ?? 50);
 const ESPERA_MS = Number(process.env.ESPERA_MS    ?? 3000);
 const MAX_429   = 3;  // consecutive 429s before stopping
