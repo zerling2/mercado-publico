@@ -139,13 +139,13 @@ async function main() {
       await sleep(ESPERA_MS * 2);
       continue;
     } else {
-      console.warn(`  #${requestNum} | pág ${pagina} | HTTP ${status}`);
+      // 403, 401, 5xx u otro error terminal — detener inmediatamente
+      console.error(`  #${requestNum} | pág ${pagina} | HTTP ${status} — error terminal, deteniendo`);
       csvStream.write(csvRow(requestNum, pagina, status, 0));
+      break;
     }
 
-    if (pagina > 1) {
-      await sleep(ESPERA_MS);
-    }
+    await sleep(ESPERA_MS);
   }
 
   csvStream.end();
