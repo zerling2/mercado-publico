@@ -16,6 +16,8 @@ jobs:
   medir:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout
@@ -24,7 +26,20 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
+
+      - name: Verificar secret
+        run: |
+          if [ -z "$MP_API_TICKET" ]; then
+            echo "❌ ERROR: El secret MP_API_TICKET no está configurado."
+            echo "   Ve a Settings → Secrets and variables → Actions → New repository secret"
+            echo "   Nombre: MP_API_TICKET   Valor: tu ticket de Mercado Público"
+            exit 1
+          else
+            echo "✓ MP_API_TICKET presente (${#MP_API_TICKET} caracteres)"
+          fi
+        env:
+          MP_API_TICKET: ${{ secrets.MP_API_TICKET }}
 
       - name: Ejecutar medición
         env:
