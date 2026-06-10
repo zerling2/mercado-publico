@@ -35,7 +35,17 @@ export async function GET(req: NextRequest) {
   let paginaActual  = paginaInicio;
 
   for (let i = 0; i < limite; i++) {
-    const url = `${API_BASE}/v2/compra-agil?tamano_pagina=${tamano}&pagina=${paginaActual}`;
+    // numero_pagina es el param correcto (no 'pagina') — ver backend/lib/mercado-publico-api.js
+    // La API también requiere rango de fechas; sin él devuelve 400 {"success":"NOK"}
+    const desde = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+    const hasta = new Date().toISOString();
+    const params = new URLSearchParams({
+      tamano_pagina: String(tamano),
+      numero_pagina: String(paginaActual),
+      publicado_desde: desde,
+      publicado_hasta: hasta,
+    });
+    const url = `${API_BASE}/v2/compra-agil?${params}`;
     const ts  = new Date().toISOString();
 
     let status: number | string = 0;
