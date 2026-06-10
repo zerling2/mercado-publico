@@ -15,18 +15,19 @@ export async function GET(req: NextRequest) {
   const desde = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const hasta = new Date().toISOString();
 
-  // 1. Fetch lista — 1 item
+  // 1. Fetch lista — 50 items, tomamos solo el primero (tamano_pagina=1 devuelve 400)
   const listParams = new URLSearchParams({
     publicado_desde: desde,
     publicado_hasta: hasta,
     region,
-    tamano_pagina: '1',
+    tamano_pagina: '50',
     numero_pagina: '1',
   });
 
   let listaRaw: unknown = null;
   let primerItem: unknown = null;
   let listStatus = 0;
+  let listError: string | undefined;
 
   try {
     const ctrl = new AbortController();
@@ -40,8 +41,12 @@ export async function GET(req: NextRequest) {
     const text = await r.text();
     try {
       listaRaw = JSON.parse(text);
-      const items = (listaRaw as { payload?: { items?: unknown[] } })?.payload?.items ?? [];
-      primerItem = items[0] ?? null;
+      if (listStatus !== 200) {
+        listError = text.slice(0, 300);
+      } else {
+        const items = (listaRaw as { payload?: { items?: unknown[] } })?.payload?.items ?? [];
+        primerItem = items[0] ?? null;
+      }
     } catch {
       listaRaw = { parseError: true, raw: text.slice(0, 500) };
     }
@@ -77,6 +82,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     lista: {
       status: listStatus,
+      error: listError,
       primer_item: primerItem,
     },
     detalle: {
