@@ -15,7 +15,6 @@ export async function GET(req: NextRequest) {
   const desde = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const hasta = new Date().toISOString();
 
-  // 1. Fetch lista — 50 items, tomamos solo el primero (tamano_pagina=1 devuelve 400)
   const listParams = new URLSearchParams({
     publicado_desde: desde,
     publicado_hasta: hasta,
@@ -23,72 +22,64 @@ export async function GET(req: NextRequest) {
     tamano_pagina: '50',
     numero_pagina: '1',
   });
+  const listUrl = `${API_BASE}/v2/compra-agil?${listParams}`;
 
-  let listaRaw: unknown = null;
-  let primerItem: unknown = null;
+  // ── Paso 1: lista ────────────────────────────────────────────────────────────
   let listStatus = 0;
-  let listError: string | undefined;
+  let listBodyRaw = '';
+  let listParsed: unknown = null;
+  let primerItem: unknown = null;
 
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 7000);
-    const r = await fetch(`${API_BASE}/v2/compra-agil?${listParams}`, {
-      headers: { ticket },
-      signal: ctrl.signal,
-    });
+    const r = await fetch(listUrl, { headers: { ticket }, signal: ctrl.signal });
     clearTimeout(t);
     listStatus = r.status;
-    const text = await r.text();
-    try {
-      listaRaw = JSON.parse(text);
-      if (listStatus !== 200) {
-        listError = text.slice(0, 300);
-      } else {
-        const items = (listaRaw as { payload?: { items?: unknown[] } })?.payload?.items ?? [];
-        primerItem = items[0] ?? null;
-      }
-    } catch {
-      listaRaw = { parseError: true, raw: text.slice(0, 500) };
-    }
+    listBodyRaw = await r.text();
+    try { listParsed = JSON.parse(listBodyRaw); } catch { /* no-op */ }
+    const items = (listParsed as { payload?: { items?: unknown[] } })?.payload?.items ?? [];
+    primerItem = items[0] ?? null;
   } catch (err) {
-    listaRaw = { fetchError: String(err) };
+    listBodyRaw = String(err);
   }
 
-  // 2. Fetch detalle por código
+  // ── Paso 2: detalle ──────────────────────────────────────────────────────────
   const codigo = (primerItem as Record<string, unknown>)?.codigo as string | undefined;
-  let detalleRaw: unknown = null;
   let detalleStatus = 0;
-  let detalleUrl = '';
+  let detalleBodyRaw = '';
+  let detalleParsed: unknown = null;
+  const detalleUrl = codigo ? `${API_BASE}/v2/compra-agil/${encodeURIComponent(codigo)}` : '';
 
   if (codigo) {
-    detalleUrl = `${API_BASE}/v2/compra-agil/${encodeURIComponent(codigo)}`;
     try {
       const ctrl2 = new AbortController();
       const t2 = setTimeout(() => ctrl2.abort(), 7000);
-      const r2 = await fetch(detalleUrl, {
-        headers: { ticket },
-        signal: ctrl2.signal,
-      });
+      const r2 = await fetch(detalleUrl, { headers: { ticket }, signal: ctrl2.signal });
       clearTimeout(t2);
       detalleStatus = r2.status;
-      const text2 = await r2.text();
-      try { detalleRaw = JSON.parse(text2); }
-      catch { detalleRaw = { parseError: true, raw: text2.slice(0, 500) }; }
+      detalleBodyRaw = await r2.text();
+      try { detalleParsed = JSON.parse(detalleBodyRaw); } catch { /* no-op */ }
     } catch (err) {
-      detalleRaw = { fetchError: String(err) };
+      detalleBodyRaw = String(err);
     }
   }
 
   return NextResponse.json({
+    debug: {
+      list_url: listUrl,
+      list_status: listStatus,
+      list_body_raw: listBodyRaw.slice(0, 2000),
+    },
     lista: {
       status: listStatus,
-      error: listError,
       primer_item: primerItem,
     },
     detalle: {
       url: detalleUrl,
       status: detalleStatus,
-      raw: detalleRaw,
+      body_raw: detalleBodyRaw.slice(0, 2000),
+      parsed: detalleParsed,
     },
   });
 }
