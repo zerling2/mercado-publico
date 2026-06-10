@@ -33,11 +33,14 @@ export default function MedirCuotaPage() {
     setEstado('corriendo');
     setRespuesta(null);
     try {
-      const url = `/api/admin/medir-cuota?limite=12&espera_ms=1100&pagina_inicio=${paginaInicio}`;
+      const url = `/api/admin/medir-cuota?limite=6&espera_ms=1100&pagina_inicio=${paginaInicio}`;
       const r = await fetch(url, {
         headers: { Authorization: `Bearer ${ticket.trim()}` },
       });
-      const data: Respuesta = await r.json();
+      const text = await r.text();
+      let data: Respuesta;
+      try { data = JSON.parse(text); }
+      catch { throw new Error(`Respuesta inesperada del servidor: ${text.slice(0, 200)}`); }
       if (data.error) { setEstado('error'); setRespuesta(data); return; }
       setRespuesta(data);
       setEstado('listo');

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 25; // Vercel hobby plan max
+// maxDuration máximo en Hobby plan es 10s — no declarar más alto o falla
 
 const API_BASE = 'https://api2.mercadopublico.cl';
 
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   }
 
   const paginaInicio = Math.max(1, Number(req.nextUrl.searchParams.get('pagina_inicio') ?? 1));
-  const limite       = Math.min(Number(req.nextUrl.searchParams.get('limite') ?? 12), 20);
+  const limite       = Math.min(Number(req.nextUrl.searchParams.get('limite') ?? 6), 8); // 6×1.1s ≈ 7s < 10s timeout
   const esperaMs     = Math.min(Number(req.nextUrl.searchParams.get('espera_ms') ?? 1100), 5000);
   const tamano       = Math.min(Number(req.nextUrl.searchParams.get('tamano_pagina') ?? 50), 100);
 
@@ -53,10 +53,10 @@ export async function GET(req: NextRequest) {
     let detalle: string | undefined;
 
     try {
-      const r = await fetch(url, {
-        headers: { ticket },
-        signal: AbortSignal.timeout(8000),
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 7000);
+      const r = await fetch(url, { headers: { ticket }, signal: controller.signal });
+      clearTimeout(timer);
       status = r.status;
       const text = await r.text();
       let json: Record<string, unknown> | null = null;
